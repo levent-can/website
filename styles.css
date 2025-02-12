@@ -1,0 +1,182 @@
+body {
+  color: #40514E;
+  margin: 0;
+  text-align: center;
+  /*This doesn't work if a block element has a width set*/
+  /***** font-family: "Helvetica Neue",Helvetica,Arial,sans-serif /*first choice, then in case browser does't supprt it; five main groups, you can check "web safe fonts" ... You can check fonts from https://www.cssfontstack.com/ and copy set of fallbacks for your desired font ... But you can also use font embedding, look up @ fonts.google.com*/
+  font-family: 'Space Mono', monospace;
+}
+
+h1 {
+  /***** width: 10%; /*if you set this, your text will align itself to the left, pre-defined settings*/
+  /***** margin: 0 auto 0 auto; /*You can set its left & right margins to auto, this will work*/
+  /***** font-family: 'Homemade Apple', cursive; */
+  color: #07689f;
+  font-family: 'Reenie Beanie', cursive;
+  font-size: 10rem;
+  /* 16px = 100% = 1em */
+  /*use rem for sizing the body fontsize*/
+  margin: 50px auto 0 auto;
+}
+
+h2 {
+  color: #07689f;
+  font-family: 'Quicksand', sans-serif;
+  font-size: 2rem;
+  padding-bottom: 10px;
+}
+
+h3 {
+  color: #11999E;
+  font-family: 'Quicksand', sans-serif;
+  font-size: 1.5rem;
+}
+
+hr {
+  border: dotted #bbe1fa 10px;
+  border-bottom: none;
+  margin: 100px auto;
+  opacity: 50%;
+  width: 10%;
+  /*
+  border-style: none;
+  border-top-style: dotted;
+  border-color: #EAF6F6;
+  border-width: 7px;
+  height: 0px;
+  width: 7%; */
+}
+
+p {
+  font-size: 1.1rem;
+  line-height: 2;
+}
+
+a {
+  color: #11999E;
+  outline: none;
+  text-decoration: none;
+}
+
+a:hover {
+  background: #bbe1fa;
+}
+
+.footer-link {
+  color: #11999E;
+  font-family: 'Space Mono', monospace;
+  font-size: 1.2rem;
+  margin: 10px 25px;
+  text-decoration: none;
+}
+
+.footer-link:hover {
+  color: #EAF6F6;
+}
+
+.top-container {
+  background-color: #bbe1fa;
+  padding-top: 100px;
+  position: relative;
+}
+
+.middle-container {
+  margin: 100px 0;
+}
+
+.bottom-container {
+  background-color: #bbe1fa;
+  padding: 50px 0 20px;
+}
+
+.bio {
+  text-decoration: underline;
+}
+
+.intro {
+  width: 50%;
+  margin: auto;
+}
+
+.bee {
+  position: absolute;
+  right: 200px;
+  top: 450px;
+  width: 17%;
+  transform: rotate(320deg);
+  opacity: 0.75;
+}
+
+.mountain {
+  width: 45rem;
+}
+
+.profile-img {
+  border-radius: 25%;
+  height: 400px;
+}
+
+.a-biologist {
+  color: #07689f;
+  font-family: 'Space Mono', monospace;
+  font-size: 2.2rem;
+  font-weight: lighter;
+}
+
+.skill-row {
+  margin: 100px auto 100px auto;
+  width: 50%;
+  text-align: left;
+  line-height: 2;
+}
+
+.skill-img-left {
+  float: left;
+  margin-right: 30px;
+  width: 15%;
+}
+
+.skill-img-right {
+  float: right;
+  /*the anti-float is clear. Let's say you want the paragraph not to float around the image; you can target the paragraph by giving it a class and css that paragraph by clear: left; or right;*/
+  margin-left: 30px;
+  width: 15%;
+}
+
+.contact-message {
+  width: 50%;
+  margin: 40px auto 60px;
+}
+
+.btn {
+  background: #11cdd4;
+  background-image: -webkit-linear-gradient(top, #11cdd4, #11999e);
+  background-image: -moz-linear-gradient(top, #11cdd4, #11999e);
+  background-image: -ms-linear-gradient(top, #11cdd4, #11999e);
+  background-image: -o-linear-gradient(top, #11cdd4, #11999e);
+  background-image: linear-gradient(to bottom, #11cdd4, #11999e);
+  -webkit-border-radius: 9;
+  -moz-border-radius: 9;
+  border-radius: 9px;
+  font-family: Courier New;
+  color: #ffffff;
+  font-size: 20px;
+  padding: 10px 20px 10px 20px;
+  text-decoration: none;
+}
+
+.btn:hover {
+  background: #30e3cb;
+  background-image: -webkit-linear-gradient(top, #30e3cb, #2bc4ad);
+  background-image: -moz-linear-gradient(top, #30e3cb, #2bc4ad);
+  background-image: -ms-linear-gradient(top, #30e3cb, #2bc4ad);
+  background-image: -o-linear-gradient(top, #30e3cb, #2bc4ad);
+  background-image: linear-gradient(to bottom, #30e3cb, #2bc4ad);
+  text-decoration: none;
+}
+
+.copyright {
+  color: #ffffff;
+  font-size: 0.95rem;
+  padding: 20px 0px;
+}
