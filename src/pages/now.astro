@@ -1,0 +1,57 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+
+const updated = 'September 2026';
+
+const items = [
+	{
+		label: 'BUILDING',
+		text: 'This site — rebuilding levent-can.com from scratch as a working lab instead of a static résumé.',
+	},
+	{ label: 'WORKING ON', text: '— add what you\'re working on professionally right now.' },
+	{ label: 'LEARNING', text: '— add a skill, tool, or topic you\'re currently learning.' },
+	{ label: 'READING', text: '— add what you\'re reading.' },
+];
+---
+
+<BaseLayout title="Now — Levent Can" description="What Levent Can is working on right now.">
+	<section class="section prose">
+		<span class="tag">UPDATED {updated}</span>
+		<h1>Now</h1>
+		<p>A short list of what has my attention right now. Updated occasionally, not on a schedule.</p>
+
+		<dl class="now-list">
+			{
+				items.map((item) => (
+					<div class="now-item">
+						<dt>{item.label}</dt>
+						<dd>{item.text}</dd>
+					</div>
+				))
+			}
+		</dl>
+	</section>
+</BaseLayout>
+
+<style>
+	.now-list {
+		margin-top: 40px;
+		display: flex;
+		flex-direction: column;
+		gap: 28px;
+	}
+	.now-item {
+		border-left: 2px solid var(--violet);
+		padding-left: 16px;
+	}
+	.now-item dt {
+		font-size: 0.8rem;
+		letter-spacing: 0.1em;
+		color: var(--cyan);
+		margin-bottom: 6px;
+	}
+	.now-item dd {
+		margin: 0;
+		color: var(--text);
+	}
+</style>
