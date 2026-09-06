@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="sun" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffd23f" />
+      <stop offset="100%" stop-color="#ff2ec4" />
+    </linearGradient>
+    <clipPath id="sunClip">
+      <circle cx="32" cy="32" r="23" />
+    </clipPath>
+  </defs>
+
+  <rect width="64" height="64" rx="12" fill="#0a0417" />
+  <circle cx="32" cy="32" r="26" fill="none" stroke="#2de2ff" stroke-width="1.5" opacity="0.55" />
+
+  <circle cx="32" cy="32" r="23" fill="url(#sun)" />
+  <g clip-path="url(#sunClip)" fill="#0a0417" opacity="0.85">
+    <rect x="9" y="38" width="46" height="2.6" />
+    <rect x="9" y="43.5" width="46" height="2.6" />
+    <rect x="9" y="49" width="46" height="2.6" />
+  </g>
+
+  <text
+    x="32"
+    y="39"
+    text-anchor="middle"
+    font-family="Arial, sans-serif"
+    font-weight="900"
+    font-size="21"
+    fill="#1b0b3a"
+    letter-spacing="-1"
+  >LC</text>
+</svg>
