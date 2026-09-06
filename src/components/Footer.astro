@@ -1,0 +1,46 @@
+---
+const year = new Date().getFullYear();
+---
+
+<footer class="footer">
+	<div class="container footer-inner">
+		<p class="copy">© {year} LEVENT CAN</p>
+		<div class="links">
+			<a href="mailto:admin@levent-can.com">EMAIL</a>
+			<a href="https://github.com/levent-can" target="_blank" rel="noopener">GITHUB</a>
+		</div>
+	</div>
+</footer>
+
+<style>
+	.footer {
+		border-top: 1px solid var(--border);
+		padding: 32px 0;
+	}
+	.footer-inner {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		flex-wrap: wrap;
+		gap: 12px;
+	}
+	.copy {
+		margin: 0;
+		font-size: 0.8rem;
+		color: var(--text-dim);
+		letter-spacing: 0.04em;
+	}
+	.links {
+		display: flex;
+		gap: 20px;
+	}
+	.links a {
+		font-size: 0.8rem;
+		letter-spacing: 0.08em;
+		color: var(--text-muted);
+		border: none;
+	}
+	.links a:hover {
+		color: var(--cyan);
+	}
+</style>
