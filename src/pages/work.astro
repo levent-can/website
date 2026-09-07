@@ -1,5 +1,14 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
+
+const caseStudies = [
+	{
+		slug: '/work/fcr-root-cause',
+		title: 'The 8 Points Hiding Behind a Third-Party Booking',
+		summary:
+			'How cross-referencing FCR, CSAT, and CES instead of watching FCR alone surfaced a single fixable process gap.',
+	},
+];
 ---
 
 <BaseLayout
@@ -7,12 +16,51 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 	description="Case studies: real problems, the data behind them, and what shipped."
 >
 	<section class="section prose">
-		<span class="tag">IN PROGRESS</span>
+		<span class="tag">1 CASE STUDY, MORE COMING</span>
 		<h1>Work</h1>
 		<p>
 			Case studies from real business problems — framed as problem, data, analysis, solution,
-			result. Not screenshots of dashboards, but the reasoning behind them.
+			result. Not screenshots of dashboards, but the reasoning behind them. Client and account
+			names are always left out.
 		</p>
-		<p>First case study is being written. Check back soon, or see what's live on <a href="/now">/now</a>.</p>
+
+		<ul class="case-list">
+			{
+				caseStudies.map((cs) => (
+					<li>
+						<a href={cs.slug}>{cs.title}</a>
+						<p>{cs.summary}</p>
+					</li>
+				))
+			}
+		</ul>
 	</section>
 </BaseLayout>
+
+<style>
+	.case-list {
+		list-style: none;
+		padding: 0;
+		margin: 40px 0 0;
+		display: flex;
+		flex-direction: column;
+		gap: 28px;
+	}
+	.case-list li {
+		border-left: 2px solid var(--violet);
+		padding-left: 16px;
+	}
+	.case-list a {
+		font-size: 1.1rem;
+		font-weight: 700;
+		color: var(--text);
+		border: none;
+	}
+	.case-list a:hover {
+		color: var(--cyan);
+	}
+	.case-list p {
+		margin: 6px 0 0;
+		color: var(--text-muted);
+	}
+</style>

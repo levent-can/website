@@ -1,0 +1,77 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+---
+
+<BaseLayout
+	title="The 8 Points Hiding Behind a Third-Party Booking — Levent Can"
+	description="How cross-referencing FCR, CSAT, and CES — instead of watching FCR alone — surfaced a single fixable process gap and a measured 5-point FCR gain."
+>
+	<section class="section prose">
+		<a class="back" href="/work">← Work</a>
+		<span class="tag">CASE STUDY</span>
+		<h1>The 8 Points Hiding Behind a Third-Party Booking</h1>
+		<p class="lede">
+			FCR was missing target on a travel and tourism account. FCR alone couldn't say why —
+			combining it with CSAT and CES could.
+		</p>
+
+		<h3>Problem</h3>
+		<p>
+			First Contact Resolution was running below target. Looked at on its own, the metric could
+			only confirm that something was wrong — it gave no indication of the mechanism behind it,
+			or what to actually do about it.
+		</p>
+
+		<h3>Data</h3>
+		<p>FCR, CSAT, and CES at the individual contact level.</p>
+
+		<h3>Analysis</h3>
+		<p>
+			Instead of treating FCR as a standalone number, I cross-referenced it against CSAT and CES
+			and grouped contacts by combinations of the three — isolating, for example, cases where
+			CSAT was strongly positive but FCR was still marked unresolved. That divergence was the
+			signal: FCR on its own would never have surfaced it, since it can only tell you the score is
+			off target, not why.
+		</p>
+		<p>
+			Digging into that specific segment turned up a common thread: every one of those contacts
+			involved a vacation booked through a third-party site. Agents had no visibility or edit
+			access into those bookings, so the only option was to redirect the customer back to the
+			third party — leaving the contact technically unresolved even when the customer was happy
+			with the agent.
+		</p>
+
+		<h3>Solution</h3>
+		<p>
+			Brought the finding to the client with a specific, narrow ask: give agents visibility and
+			edit access into third-party-booked vacations within the customer's account, closing the
+			exact gap that was forcing a redirect instead of a resolution.
+		</p>
+
+		<h3>Result</h3>
+		<p>
+			Modeled an estimated 8-point FCR opportunity tied to this one process gap. By the time I
+			moved to a different account, FCR here was up 5 points — a measured result, not just a
+			projection, with the rest of the fix still rolling out.
+		</p>
+	</section>
+</BaseLayout>
+
+<style>
+	.back {
+		display: block;
+		font-size: 0.8rem;
+		color: var(--text-muted);
+		border: none;
+		margin-bottom: 20px;
+	}
+	.back:hover {
+		color: var(--cyan);
+	}
+	.lede {
+		font-size: 1.2rem;
+		color: var(--cyan);
+		max-width: 55ch;
+		margin: 4px 0 40px;
+	}
+</style>
