@@ -1,5 +1,6 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
+import '../../styles/tool.css';
 ---
 
 <BaseLayout
@@ -27,10 +28,13 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 		</div>
 
 		<div class="settings-row">
-			<label>Target score <input type="number" id="target-input" min="0" max="100" /> %</label>
 			<label
-				>Critical fail caps score at <input type="number" id="ceiling-input" min="0" max="100" />
+				>Target score <input class="tool-input" type="number" id="target-input" min="0" max="100" />
 				%</label
+			>
+			<label
+				>Critical fail caps score at
+				<input class="tool-input" type="number" id="ceiling-input" min="0" max="100" /> %</label
 			>
 		</div>
 
@@ -42,7 +46,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 				<div class="score-number" id="score-number">—</div>
 				<div class="score-status" id="score-status"></div>
 			</div>
-			<div class="critical-banner" id="critical-banner" hidden></div>
+			<div class="alert-banner tone-bad" id="critical-banner" hidden></div>
 			<ul class="breakdown-list" id="breakdown-list"></ul>
 		</div>
 
@@ -132,7 +136,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 		head.className = 'category-head';
 
 		const nameInput = document.createElement('input');
-		nameInput.className = 'cat-name';
+		nameInput.className = 'cat-name tool-input';
 		nameInput.value = category.name;
 		nameInput.setAttribute('aria-label', 'Category name');
 		nameInput.addEventListener('input', () => {
@@ -146,7 +150,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 		weightInput.type = 'number';
 		weightInput.min = '0';
 		weightInput.max = '100';
-		weightInput.className = 'cat-weight';
+		weightInput.className = 'cat-weight tool-input';
 		weightInput.value = String(category.weight);
 		weightInput.addEventListener('input', () => {
 			category.weight = Number(weightInput.value) || 0;
@@ -215,7 +219,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 		criticalLabel.append(criticalCheckbox, document.createTextNode('Critical'));
 
 		const nameInput = document.createElement('input');
-		nameInput.className = 'attr-name';
+		nameInput.className = 'attr-name tool-input';
 		nameInput.value = attribute.name;
 		nameInput.setAttribute('aria-label', 'Attribute name');
 		nameInput.addEventListener('input', () => {
@@ -411,97 +415,6 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 </script>
 
 <style is:global>
-	.prose-wide {
-		max-width: var(--wide-width);
-		margin: 0 auto;
-		padding: 0 24px;
-	}
-	.back {
-		display: block;
-		font-size: 0.8rem;
-		color: var(--text-muted);
-		border: none;
-		margin-bottom: 20px;
-	}
-	.back:hover {
-		color: var(--cyan);
-	}
-	.intro {
-		max-width: 65ch;
-		color: var(--text-muted);
-	}
-
-	.btn-ghost {
-		font-family: var(--font-mono);
-		font-size: 0.8rem;
-		letter-spacing: 0.04em;
-		color: var(--text-muted);
-		background: transparent;
-		border: 1px solid var(--border-bright);
-		border-radius: 4px;
-		padding: 8px 14px;
-		cursor: pointer;
-	}
-	.btn-ghost:hover {
-		color: var(--cyan);
-		border-color: var(--cyan);
-	}
-	.btn-ghost.small {
-		font-size: 0.72rem;
-		padding: 5px 10px;
-		margin-top: 10px;
-	}
-
-	.toolbar {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		flex-wrap: wrap;
-		gap: 12px;
-		margin: 36px 0 20px;
-	}
-	.presets {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		flex-wrap: wrap;
-	}
-	.toolbar-label {
-		font-size: 0.8rem;
-		color: var(--text-dim);
-	}
-
-	.settings-row {
-		display: flex;
-		gap: 28px;
-		flex-wrap: wrap;
-		margin-bottom: 32px;
-		font-size: 0.85rem;
-		color: var(--text-muted);
-	}
-	.settings-row label {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-	}
-	.settings-row input {
-		width: 60px;
-	}
-
-	input {
-		font-family: var(--font-mono);
-		background: var(--bg-panel);
-		border: 1px solid var(--border);
-		color: var(--text);
-		border-radius: 3px;
-		padding: 6px 8px;
-		font-size: 0.85rem;
-	}
-	input:focus {
-		outline: 1px solid var(--cyan);
-		border-color: var(--cyan);
-	}
-
 	.categories {
 		display: flex;
 		flex-direction: column;
@@ -602,97 +515,5 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 		background: rgba(157, 143, 192, 0.15);
 		border-color: var(--text-muted);
 		color: var(--text-muted);
-	}
-
-	.icon-btn {
-		background: transparent;
-		border: none;
-		color: var(--text-dim);
-		cursor: pointer;
-		font-size: 0.9rem;
-		padding: 4px;
-	}
-	.icon-btn:hover {
-		color: var(--magenta);
-	}
-
-	.results-panel {
-		margin-top: 40px;
-		padding: 24px;
-		border: 1px solid var(--border-bright);
-		border-radius: 8px;
-		background: var(--bg-panel);
-	}
-	.score-display {
-		display: flex;
-		align-items: baseline;
-		gap: 16px;
-		margin-bottom: 12px;
-	}
-	.score-number {
-		font-family: var(--font-display);
-		font-size: 2.4rem;
-		color: var(--text);
-	}
-	.score-number.pass {
-		color: var(--cyan);
-		text-shadow: 0 0 16px rgba(45, 226, 255, 0.4);
-	}
-	.score-number.fail {
-		color: var(--magenta);
-		text-shadow: 0 0 16px rgba(255, 46, 196, 0.4);
-	}
-	.score-status {
-		color: var(--text-muted);
-		font-size: 0.9rem;
-	}
-	.critical-banner {
-		background: rgba(255, 46, 196, 0.1);
-		border: 1px solid var(--magenta);
-		color: var(--magenta);
-		border-radius: 4px;
-		padding: 10px 14px;
-		font-size: 0.85rem;
-		margin-bottom: 16px;
-	}
-	.breakdown-list {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-	}
-	.breakdown-list li {
-		display: flex;
-		justify-content: space-between;
-		gap: 12px;
-		font-size: 0.85rem;
-		padding: 6px 0;
-		border-bottom: 1px solid var(--border);
-	}
-	.bd-name {
-		flex: 1;
-		color: var(--text);
-	}
-	.bd-weight {
-		color: var(--text-dim);
-	}
-	.bd-score {
-		color: var(--cyan);
-		min-width: 44px;
-		text-align: right;
-	}
-
-	.share-row {
-		display: flex;
-		align-items: center;
-		gap: 12px;
-		margin-top: 20px;
-		flex-wrap: wrap;
-	}
-	.copy-feedback {
-		font-size: 0.8rem;
-		color: var(--cyan);
 	}
 </style>
