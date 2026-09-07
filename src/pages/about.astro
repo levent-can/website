@@ -1,25 +1,94 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
+
+const expertise = [
+	'Quality Assurance',
+	'Root-Cause Analysis',
+	'Team Leadership',
+	'Sales Coaching',
+	'Client Reporting',
+	'Process Automation',
+	'AI-Assisted QA & Training',
+];
+
+const tools = ['Excel', 'Google Sheets', 'Power BI', 'Looker Studio', 'Python', 'R'];
 ---
 
 <BaseLayout
 	title="About — Levent Can"
-	description="Background, expertise, and how to get in touch with Levent Can."
+	description="From botanist to BPO quality lead: Levent Can's background, expertise, and how to get in touch."
 >
 	<section class="section prose">
-		<span class="tag">DRAFT — needs your input</span>
 		<h1>About</h1>
+		<p class="lede">I spent a decade classifying crocus species. Now I classify root causes.</p>
 
 		<h3>Background</h3>
-		<p>— a few sentences on your professional background belong here.</p>
+		<p>
+			I trained as a biologist — a botanist, specifically, with a focus on the genus <em>Crocus</em>.
+			For years I worked as Managing Editor of <a href="https://onlinelibrary.wiley.com/journal/19968175" target="_blank" rel="noopener">TAXON</a>,
+			the international journal of plant systematics, alongside teaching and research.
+		</p>
+		<p>
+			In 2024 I changed lanes into the BPO industry. I started as a frontline agent on a
+			hosting, domains, and Microsoft 365 project — supporting customers technically while also
+			selling domains, servers, hosting, CRMs, and M365 products.
+		</p>
+		<p>
+			That led to a promotion into Quality Assurance and Sales Coaching: auditing calls, running
+			monitorings, and coaching agents on both quality and conversion.
+		</p>
+		<p>
+			Since June 2025 I've led Quality &amp; Training for several accounts, mainly in travel and
+			tourism, managing a team of up to 20 specialists. Day to day, that means digging into QA
+			monitoring, CSAT, NPS, FCR, and CES data alongside sales performance — working out whether a
+			quality dip is real or just a measurement artifact, building dashboards, automating the
+			reporting that used to eat hours every week, and presenting findings directly to clients in
+			their own review meetings.
+		</p>
+		<p>
+			I've also started bringing AI directly into the workflow — to support agent training and to
+			speed up quality analysis — alongside Excel, Google Sheets, Power BI, Looker Studio, Python,
+			and R.
+		</p>
 
 		<h3>Expertise</h3>
-		<p>— areas of expertise, e.g. business analysis, data analysis, dashboarding, automation.</p>
+		<ul class="tag-list">
+			{expertise.map((item) => <li class="tag">{item}</li>)}
+		</ul>
 
 		<h3>Tools</h3>
-		<p>— the tools you actually use day to day (Power BI, Excel, SQL, Python, etc).</p>
+		<ul class="tag-list">
+			{tools.map((item) => <li class="tag">{item}</li>)}
+		</ul>
+
+		<h3>Elsewhere</h3>
+		<p>
+			Born in Switzerland, raised bilingual in German and Turkish, and proficient in English. I
+			attended Cağaloğlu Anadolu Lisesi in Istanbul, graduating with the Deutsches Sprachdiplom.
+		</p>
 
 		<h3>Contact</h3>
-		<p><a href="mailto:admin@levent-can.com">admin@levent-can.com</a></p>
+		<p><a href="mailto:admin@levent-can.com">admin@levent-can.com</a> · <a href="https://www.linkedin.com/in/levent-can/" target="_blank" rel="noopener">LinkedIn</a></p>
 	</section>
 </BaseLayout>
+
+<style>
+	.lede {
+		font-size: 1.3rem;
+		color: var(--cyan);
+		max-width: 50ch;
+		margin: 4px 0 40px;
+	}
+	.tag-list {
+		list-style: none;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		padding: 0;
+		margin: 0 0 8px;
+	}
+	em {
+		color: var(--text-muted);
+		font-style: italic;
+	}
+</style>
