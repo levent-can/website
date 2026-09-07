@@ -1,0 +1,75 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+---
+
+<BaseLayout
+	title="When the Real Problem Wasn't the Language — Levent Can"
+	description="An agent with the lowest NPS on a German-language team was fluent in German. The root cause wasn't comprehension — it was perceived comprehension."
+>
+	<section class="section prose">
+		<a class="back" href="/work">← Work</a>
+		<span class="tag">CASE STUDY</span>
+		<h1>When the Real Problem Wasn't the Language</h1>
+		<p class="lede">
+			One agent had the lowest NPS on a German-language team, despite being fluent in German. The
+			root cause wasn't comprehension — it was perceived comprehension.
+		</p>
+
+		<h3>Problem</h3>
+		<p>
+			One agent on a German-language account had the lowest NPS on the team and a disproportionate
+			share of repeat contacts, dragging FCR down — despite being fluent in German.
+		</p>
+
+		<h3>Data</h3>
+		<p>NPS and FCR at the individual-agent level, call monitoring notes, team benchmarks.</p>
+
+		<h3>Analysis</h3>
+		<p>
+			Most agents on German-language accounts are part of the Turkish-German diaspora, born and
+			raised in Germany, Austria, or Switzerland — culturally native, not just linguistically
+			fluent, which lets them mirror a customer's register and small talk instantly. This
+			particular agent had learned German at university: fluent and correct, but with an accent and
+			without that reflexive cultural fluency.
+		</p>
+		<p>
+			Listening to the flagged calls showed the issue wasn't comprehension — the agent understood
+			every customer correctly. It showed up specifically at the moment the agent had to say no or
+			couldn't offer a solution. In those moments, customers seemed to read the accent and slightly
+			different conversational rhythm as a sign they hadn't been understood, rather than as a
+			genuine, understood "no." That perception — not any actual language or resolution failure —
+			was driving the repeat contacts and the low NPS.
+		</p>
+
+		<h3>Solution</h3>
+		<p>
+			Coached the agent to make comprehension explicit instead of implicit: reflect the request
+			back before or right after handling it — "So, to make sure I understood correctly, you'd like
+			X — is that right?" That one habit gave customers an unambiguous signal they'd been
+			understood, independent of accent. Paired with proactively asking for an NPS rating at the end
+			of the call — standard, client-sanctioned practice on this account.
+		</p>
+
+		<h3>Result</h3>
+		<p>The agent's NPS moved from the 60s into the 80s-90s almost immediately.</p>
+	</section>
+</BaseLayout>
+
+<style>
+	.back {
+		display: block;
+		font-size: 0.8rem;
+		color: var(--text-muted);
+		border: none;
+		margin-bottom: 20px;
+	}
+	.back:hover {
+		color: var(--cyan);
+	}
+	.lede {
+		font-size: 1.2rem;
+		color: var(--cyan);
+		max-width: 55ch;
+		margin: 4px 0 40px;
+	}
+</style>
