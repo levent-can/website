@@ -1,5 +1,14 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
+
+const tools = [
+	{
+		slug: '/lab/qa-calculator',
+		title: 'QA Calculator',
+		summary:
+			'Build a weighted QA scorecard with zero-tolerance critical fails, score an evaluation, get a live result. Runs entirely in your browser.',
+	},
+];
 ---
 
 <BaseLayout
@@ -7,13 +16,51 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 	description="Working analytics tools and small interactive experiments, built to be used, not just looked at."
 >
 	<section class="section prose">
-		<span class="tag">IN PROGRESS</span>
+		<span class="tag">1 TOOL, MORE COMING</span>
 		<h1>Lab</h1>
 		<p>
 			Small, working tools — calculators, simulators, and data utilities that run entirely in
 			your browser. This is where analytical thinking turns into something you can actually
 			click on.
 		</p>
-		<p>First tool is being built. Nothing published yet.</p>
+
+		<ul class="tool-list">
+			{
+				tools.map((tool) => (
+					<li>
+						<a href={tool.slug}>{tool.title}</a>
+						<p>{tool.summary}</p>
+					</li>
+				))
+			}
+		</ul>
 	</section>
 </BaseLayout>
+
+<style>
+	.tool-list {
+		list-style: none;
+		padding: 0;
+		margin: 40px 0 0;
+		display: flex;
+		flex-direction: column;
+		gap: 28px;
+	}
+	.tool-list li {
+		border-left: 2px solid var(--violet);
+		padding-left: 16px;
+	}
+	.tool-list a {
+		font-size: 1.1rem;
+		font-weight: 700;
+		color: var(--text);
+		border: none;
+	}
+	.tool-list a:hover {
+		color: var(--cyan);
+	}
+	.tool-list p {
+		margin: 6px 0 0;
+		color: var(--text-muted);
+	}
+</style>

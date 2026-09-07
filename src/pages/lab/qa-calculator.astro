@@ -1,0 +1,698 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+---
+
+<BaseLayout
+	title="QA Calculator — Levent Can"
+	description="A configurable QA scorecard calculator: weighted categories, zero-tolerance critical fails, runs entirely in your browser."
+>
+	<section class="section prose-wide">
+		<a class="back" href="/lab">← Lab</a>
+		<span class="tag">TOOL</span>
+		<h1>QA Calculator</h1>
+		<p class="intro">
+			Build a weighted QA scorecard, score an evaluation against it, and get a live result —
+			including zero-tolerance critical fails. Nothing here is sent anywhere; it all runs in your
+			browser and is remembered locally on this device.
+		</p>
+
+		<div class="toolbar">
+			<div class="presets">
+				<span class="toolbar-label">Start from:</span>
+				<button type="button" class="btn-ghost" data-preset="customerService">Customer Service</button>
+				<button type="button" class="btn-ghost" data-preset="sales">Sales</button>
+				<button type="button" class="btn-ghost" data-preset="blank">Blank</button>
+			</div>
+			<button type="button" class="btn-ghost" id="reset-btn">Reset</button>
+		</div>
+
+		<div class="settings-row">
+			<label>Target score <input type="number" id="target-input" min="0" max="100" /> %</label>
+			<label
+				>Critical fail caps score at <input type="number" id="ceiling-input" min="0" max="100" />
+				%</label
+			>
+		</div>
+
+		<div id="categories" class="categories"></div>
+		<button type="button" class="btn-ghost" id="add-category-btn">+ Add category</button>
+
+		<div class="results-panel" id="results-panel">
+			<div class="score-display">
+				<div class="score-number" id="score-number">—</div>
+				<div class="score-status" id="score-status"></div>
+			</div>
+			<div class="critical-banner" id="critical-banner" hidden></div>
+			<ul class="breakdown-list" id="breakdown-list"></ul>
+		</div>
+
+		<div class="share-row">
+			<button type="button" class="btn-ghost" id="copy-link-btn">Copy shareable link</button>
+			<button type="button" class="btn-ghost" id="copy-summary-btn">Copy summary as text</button>
+			<span class="copy-feedback" id="copy-feedback"></span>
+		</div>
+	</section>
+</BaseLayout>
+
+<script>
+	import {
+		scoreOverall,
+		presetCustomerService,
+		presetSales,
+		presetBlank,
+		nextId,
+	} from '../../lib/qa-scoring.js';
+
+	const STORAGE_KEY = 'qa-calculator-v1';
+
+	function defaultState() {
+		return { categories: presetCustomerService(), target: 85, ceiling: 0 };
+	}
+
+	function loadState() {
+		try {
+			const params = new URLSearchParams(location.search);
+			const shared = params.get('s');
+			if (shared) {
+				const parsed = JSON.parse(decodeURIComponent(shared));
+				if (parsed && Array.isArray(parsed.categories)) return parsed;
+			}
+		} catch (e) {
+			// ignore malformed share links
+		}
+		try {
+			const saved = localStorage.getItem(STORAGE_KEY);
+			if (saved) {
+				const parsed = JSON.parse(saved);
+				if (parsed && Array.isArray(parsed.categories)) return parsed;
+			}
+		} catch (e) {
+			// localStorage unavailable — fall through to default
+		}
+		return defaultState();
+	}
+
+	let state = loadState();
+	let saveTimer;
+	function scheduleSave() {
+		clearTimeout(saveTimer);
+		saveTimer = setTimeout(() => {
+			try {
+				localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+			} catch (e) {
+				// storage unavailable (private mode, quota, etc.) — non-fatal
+			}
+		}, 300);
+	}
+
+	const categoriesEl = document.getElementById('categories');
+	const targetInput = document.getElementById('target-input');
+	const ceilingInput = document.getElementById('ceiling-input');
+
+	function findCategory(id) {
+		return state.categories.find((c) => c.id === id);
+	}
+	function findAttribute(catId, attrId) {
+		return findCategory(catId)?.attributes.find((a) => a.id === attrId);
+	}
+
+	function renderCategories() {
+		categoriesEl.innerHTML = '';
+		for (const category of state.categories) {
+			categoriesEl.appendChild(renderCategory(category));
+		}
+	}
+
+	function renderCategory(category) {
+		const el = document.createElement('div');
+		el.className = 'category';
+		el.dataset.id = category.id;
+
+		const head = document.createElement('div');
+		head.className = 'category-head';
+
+		const nameInput = document.createElement('input');
+		nameInput.className = 'cat-name';
+		nameInput.value = category.name;
+		nameInput.setAttribute('aria-label', 'Category name');
+		nameInput.addEventListener('input', () => {
+			category.name = nameInput.value;
+			scheduleSave();
+		});
+
+		const weightWrap = document.createElement('label');
+		weightWrap.className = 'weight-wrap';
+		const weightInput = document.createElement('input');
+		weightInput.type = 'number';
+		weightInput.min = '0';
+		weightInput.max = '100';
+		weightInput.className = 'cat-weight';
+		weightInput.value = String(category.weight);
+		weightInput.addEventListener('input', () => {
+			category.weight = Number(weightInput.value) || 0;
+			renderResults();
+			scheduleSave();
+		});
+		weightWrap.append(weightInput, document.createTextNode('%'));
+
+		const removeBtn = document.createElement('button');
+		removeBtn.type = 'button';
+		removeBtn.className = 'icon-btn';
+		removeBtn.textContent = '✕';
+		removeBtn.setAttribute('aria-label', 'Remove category');
+		removeBtn.addEventListener('click', () => {
+			state.categories = state.categories.filter((c) => c.id !== category.id);
+			renderCategories();
+			renderResults();
+			scheduleSave();
+		});
+
+		head.append(nameInput, weightWrap, removeBtn);
+		el.appendChild(head);
+
+		const attrsEl = document.createElement('div');
+		attrsEl.className = 'attributes';
+		for (const attribute of category.attributes) {
+			attrsEl.appendChild(renderAttribute(category, attribute));
+		}
+		el.appendChild(attrsEl);
+
+		const addAttrBtn = document.createElement('button');
+		addAttrBtn.type = 'button';
+		addAttrBtn.className = 'btn-ghost small';
+		addAttrBtn.textContent = '+ Add attribute';
+		addAttrBtn.addEventListener('click', () => {
+			category.attributes.push({
+				id: nextId('attr'),
+				name: 'New attribute',
+				critical: false,
+				status: 'unscored',
+			});
+			renderCategories();
+			renderResults();
+			scheduleSave();
+		});
+		el.appendChild(addAttrBtn);
+
+		return el;
+	}
+
+	function renderAttribute(category, attribute) {
+		const row = document.createElement('div');
+		row.className = 'attribute';
+		row.dataset.id = attribute.id;
+
+		const criticalLabel = document.createElement('label');
+		criticalLabel.className = 'critical-toggle';
+		const criticalCheckbox = document.createElement('input');
+		criticalCheckbox.type = 'checkbox';
+		criticalCheckbox.checked = attribute.critical;
+		criticalCheckbox.addEventListener('change', () => {
+			attribute.critical = criticalCheckbox.checked;
+			renderResults();
+			scheduleSave();
+		});
+		criticalLabel.append(criticalCheckbox, document.createTextNode('Critical'));
+
+		const nameInput = document.createElement('input');
+		nameInput.className = 'attr-name';
+		nameInput.value = attribute.name;
+		nameInput.setAttribute('aria-label', 'Attribute name');
+		nameInput.addEventListener('input', () => {
+			attribute.name = nameInput.value;
+			scheduleSave();
+		});
+
+		const statusGroup = document.createElement('div');
+		statusGroup.className = 'status-toggle';
+		for (const status of ['pass', 'fail', 'na']) {
+			const btn = document.createElement('button');
+			btn.type = 'button';
+			btn.dataset.status = status;
+			btn.textContent = status.toUpperCase();
+			btn.className = `status-btn status-${status}${attribute.status === status ? ' active' : ''}`;
+			btn.addEventListener('click', () => {
+				attribute.status = attribute.status === status ? 'unscored' : status;
+				for (const sibling of statusGroup.children) {
+					sibling.classList.toggle(
+						'active',
+						sibling.dataset.status === attribute.status
+					);
+				}
+				renderResults();
+				scheduleSave();
+			});
+			statusGroup.appendChild(btn);
+		}
+
+		const removeBtn = document.createElement('button');
+		removeBtn.type = 'button';
+		removeBtn.className = 'icon-btn';
+		removeBtn.textContent = '✕';
+		removeBtn.setAttribute('aria-label', 'Remove attribute');
+		removeBtn.addEventListener('click', () => {
+			category.attributes = category.attributes.filter((a) => a.id !== attribute.id);
+			renderCategories();
+			renderResults();
+			scheduleSave();
+		});
+
+		const topRow = document.createElement('div');
+		topRow.className = 'attribute-top';
+		topRow.append(nameInput, removeBtn);
+
+		const bottomRow = document.createElement('div');
+		bottomRow.className = 'attribute-bottom';
+		bottomRow.append(criticalLabel, statusGroup);
+
+		row.append(topRow, bottomRow);
+		return row;
+	}
+
+	function renderResults() {
+		const ceiling = Number(ceilingInput.value) || 0;
+		const target = Number(targetInput.value) || 0;
+		const result = scoreOverall(state.categories, ceiling);
+
+		const scoreNumberEl = document.getElementById('score-number');
+		const scoreStatusEl = document.getElementById('score-status');
+		const bannerEl = document.getElementById('critical-banner');
+		const breakdownEl = document.getElementById('breakdown-list');
+
+		if (result.overall === null) {
+			scoreNumberEl.textContent = '—';
+			scoreNumberEl.className = 'score-number';
+			scoreStatusEl.textContent = 'Awaiting scoring';
+		} else {
+			scoreNumberEl.textContent = `${result.overall.toFixed(1)}%`;
+			const pass = result.overall >= target && !result.criticalFail;
+			scoreNumberEl.className = `score-number ${pass ? 'pass' : 'fail'}`;
+			scoreStatusEl.textContent = pass
+				? `Above target (${target}%)`
+				: `Below target (${target}%)`;
+		}
+
+		if (result.criticalFail) {
+			const failedAttrs = [];
+			for (const c of state.categories) {
+				for (const a of c.attributes) {
+					if (a.critical && a.status === 'fail') failedAttrs.push(a.name);
+				}
+			}
+			bannerEl.hidden = false;
+			bannerEl.textContent = `⚠ Critical fail — "${failedAttrs.join('", "')}" — score capped at ${ceiling}%.`;
+		} else {
+			bannerEl.hidden = true;
+		}
+
+		breakdownEl.innerHTML = '';
+		for (const category of state.categories) {
+			const scoreEntry = result.categoryScores.find((c) => c.id === category.id);
+			const li = document.createElement('li');
+			const scoreText = scoreEntry ? `${scoreEntry.score.toFixed(0)}%` : 'N/A';
+			li.innerHTML = `<span class="bd-name">${escapeHtml(category.name)}</span><span class="bd-weight">weight ${category.weight}%</span><span class="bd-score">${scoreText}</span>`;
+			breakdownEl.appendChild(li);
+		}
+	}
+
+	function escapeHtml(str) {
+		const div = document.createElement('div');
+		div.textContent = str;
+		return div.innerHTML;
+	}
+
+	function applyPreset(presetFn) {
+		state = { categories: presetFn(), target: state.target ?? 85, ceiling: state.ceiling ?? 0 };
+		targetInput.value = String(state.target);
+		ceilingInput.value = String(state.ceiling);
+		renderCategories();
+		renderResults();
+		scheduleSave();
+	}
+
+	document.querySelectorAll('[data-preset]').forEach((btn) => {
+		btn.addEventListener('click', () => {
+			const map = { customerService: presetCustomerService, sales: presetSales, blank: presetBlank };
+			applyPreset(map[btn.dataset.preset]);
+		});
+	});
+
+	document.getElementById('reset-btn').addEventListener('click', () => {
+		state = defaultState();
+		targetInput.value = String(state.target);
+		ceilingInput.value = String(state.ceiling);
+		renderCategories();
+		renderResults();
+		scheduleSave();
+	});
+
+	document.getElementById('add-category-btn').addEventListener('click', () => {
+		state.categories.push({ id: nextId('cat'), name: 'New category', weight: 0, attributes: [] });
+		renderCategories();
+		renderResults();
+		scheduleSave();
+	});
+
+	targetInput.addEventListener('input', () => {
+		state.target = Number(targetInput.value) || 0;
+		renderResults();
+		scheduleSave();
+	});
+	ceilingInput.addEventListener('input', () => {
+		state.ceiling = Number(ceilingInput.value) || 0;
+		renderResults();
+		scheduleSave();
+	});
+
+	function flashCopyFeedback(message) {
+		const el = document.getElementById('copy-feedback');
+		el.textContent = message;
+		setTimeout(() => {
+			if (el.textContent === message) el.textContent = '';
+		}, 2000);
+	}
+
+	document.getElementById('copy-link-btn').addEventListener('click', async () => {
+		const url = `${location.origin}${location.pathname}?s=${encodeURIComponent(JSON.stringify(state))}`;
+		try {
+			await navigator.clipboard.writeText(url);
+			flashCopyFeedback('Link copied.');
+		} catch (e) {
+			flashCopyFeedback('Could not copy — copy manually from the address bar after sharing.');
+		}
+	});
+
+	document.getElementById('copy-summary-btn').addEventListener('click', async () => {
+		const ceiling = Number(ceilingInput.value) || 0;
+		const target = Number(targetInput.value) || 0;
+		const result = scoreOverall(state.categories, ceiling);
+		const lines = [
+			`QA Score: ${result.overall === null ? '—' : result.overall.toFixed(1) + '%'} (target ${target}%)`,
+			result.criticalFail ? 'CRITICAL FAIL — score capped.' : '',
+			'',
+			...state.categories.map((c) => {
+				const entry = result.categoryScores.find((s) => s.id === c.id);
+				return `- ${c.name} (weight ${c.weight}%): ${entry ? entry.score.toFixed(0) + '%' : 'N/A'}`;
+			}),
+		].filter(Boolean);
+		try {
+			await navigator.clipboard.writeText(lines.join('\n'));
+			flashCopyFeedback('Summary copied.');
+		} catch (e) {
+			flashCopyFeedback('Could not copy to clipboard.');
+		}
+	});
+
+	// initial render
+	targetInput.value = String(state.target ?? 85);
+	ceilingInput.value = String(state.ceiling ?? 0);
+	renderCategories();
+	renderResults();
+</script>
+
+<style is:global>
+	.prose-wide {
+		max-width: var(--wide-width);
+		margin: 0 auto;
+		padding: 0 24px;
+	}
+	.back {
+		display: block;
+		font-size: 0.8rem;
+		color: var(--text-muted);
+		border: none;
+		margin-bottom: 20px;
+	}
+	.back:hover {
+		color: var(--cyan);
+	}
+	.intro {
+		max-width: 65ch;
+		color: var(--text-muted);
+	}
+
+	.btn-ghost {
+		font-family: var(--font-mono);
+		font-size: 0.8rem;
+		letter-spacing: 0.04em;
+		color: var(--text-muted);
+		background: transparent;
+		border: 1px solid var(--border-bright);
+		border-radius: 4px;
+		padding: 8px 14px;
+		cursor: pointer;
+	}
+	.btn-ghost:hover {
+		color: var(--cyan);
+		border-color: var(--cyan);
+	}
+	.btn-ghost.small {
+		font-size: 0.72rem;
+		padding: 5px 10px;
+		margin-top: 10px;
+	}
+
+	.toolbar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		flex-wrap: wrap;
+		gap: 12px;
+		margin: 36px 0 20px;
+	}
+	.presets {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		flex-wrap: wrap;
+	}
+	.toolbar-label {
+		font-size: 0.8rem;
+		color: var(--text-dim);
+	}
+
+	.settings-row {
+		display: flex;
+		gap: 28px;
+		flex-wrap: wrap;
+		margin-bottom: 32px;
+		font-size: 0.85rem;
+		color: var(--text-muted);
+	}
+	.settings-row label {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+	}
+	.settings-row input {
+		width: 60px;
+	}
+
+	input {
+		font-family: var(--font-mono);
+		background: var(--bg-panel);
+		border: 1px solid var(--border);
+		color: var(--text);
+		border-radius: 3px;
+		padding: 6px 8px;
+		font-size: 0.85rem;
+	}
+	input:focus {
+		outline: 1px solid var(--cyan);
+		border-color: var(--cyan);
+	}
+
+	.categories {
+		display: flex;
+		flex-direction: column;
+		gap: 20px;
+		margin-bottom: 12px;
+	}
+	.category {
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		padding: 16px;
+		background: var(--bg-panel);
+	}
+	.category-head {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		margin-bottom: 12px;
+	}
+	.cat-name {
+		flex: 1;
+		font-weight: 700;
+	}
+	.weight-wrap {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		color: var(--text-muted);
+		font-size: 0.85rem;
+		white-space: nowrap;
+	}
+	.cat-weight {
+		width: 52px;
+	}
+
+	.attributes {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+	.attribute {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		padding: 10px;
+		border-radius: 4px;
+		background: var(--bg-panel-raised);
+	}
+	.attribute-top {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+	.attribute-bottom {
+		display: flex;
+		align-items: center;
+		gap: 14px;
+		flex-wrap: wrap;
+	}
+	.critical-toggle {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		font-size: 0.7rem;
+		color: var(--magenta);
+		white-space: nowrap;
+	}
+	.attr-name {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.status-toggle {
+		display: flex;
+		gap: 4px;
+	}
+	.status-btn {
+		font-family: var(--font-mono);
+		font-size: 0.7rem;
+		letter-spacing: 0.04em;
+		padding: 5px 9px;
+		border-radius: 3px;
+		border: 1px solid var(--border-bright);
+		background: transparent;
+		color: var(--text-dim);
+		cursor: pointer;
+	}
+	.status-btn.status-pass.active {
+		background: rgba(45, 226, 255, 0.15);
+		border-color: var(--cyan);
+		color: var(--cyan);
+	}
+	.status-btn.status-fail.active {
+		background: rgba(255, 46, 196, 0.15);
+		border-color: var(--magenta);
+		color: var(--magenta);
+	}
+	.status-btn.status-na.active {
+		background: rgba(157, 143, 192, 0.15);
+		border-color: var(--text-muted);
+		color: var(--text-muted);
+	}
+
+	.icon-btn {
+		background: transparent;
+		border: none;
+		color: var(--text-dim);
+		cursor: pointer;
+		font-size: 0.9rem;
+		padding: 4px;
+	}
+	.icon-btn:hover {
+		color: var(--magenta);
+	}
+
+	.results-panel {
+		margin-top: 40px;
+		padding: 24px;
+		border: 1px solid var(--border-bright);
+		border-radius: 8px;
+		background: var(--bg-panel);
+	}
+	.score-display {
+		display: flex;
+		align-items: baseline;
+		gap: 16px;
+		margin-bottom: 12px;
+	}
+	.score-number {
+		font-family: var(--font-display);
+		font-size: 2.4rem;
+		color: var(--text);
+	}
+	.score-number.pass {
+		color: var(--cyan);
+		text-shadow: 0 0 16px rgba(45, 226, 255, 0.4);
+	}
+	.score-number.fail {
+		color: var(--magenta);
+		text-shadow: 0 0 16px rgba(255, 46, 196, 0.4);
+	}
+	.score-status {
+		color: var(--text-muted);
+		font-size: 0.9rem;
+	}
+	.critical-banner {
+		background: rgba(255, 46, 196, 0.1);
+		border: 1px solid var(--magenta);
+		color: var(--magenta);
+		border-radius: 4px;
+		padding: 10px 14px;
+		font-size: 0.85rem;
+		margin-bottom: 16px;
+	}
+	.breakdown-list {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+	}
+	.breakdown-list li {
+		display: flex;
+		justify-content: space-between;
+		gap: 12px;
+		font-size: 0.85rem;
+		padding: 6px 0;
+		border-bottom: 1px solid var(--border);
+	}
+	.bd-name {
+		flex: 1;
+		color: var(--text);
+	}
+	.bd-weight {
+		color: var(--text-dim);
+	}
+	.bd-score {
+		color: var(--cyan);
+		min-width: 44px;
+		text-align: right;
+	}
+
+	.share-row {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		margin-top: 20px;
+		flex-wrap: wrap;
+	}
+	.copy-feedback {
+		font-size: 0.8rem;
+		color: var(--cyan);
+	}
+</style>
