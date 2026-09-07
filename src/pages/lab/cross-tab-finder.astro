@@ -1,0 +1,373 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import '../../styles/tool.css';
+---
+
+<BaseLayout
+	title="Cross-Tab Finder — Levent Can"
+	description="Paste two metrics side by side and see where they diverge — the same technique behind the case studies on this site, as a tool."
+>
+	<section class="section prose-wide">
+		<a class="back" href="/lab">← Lab</a>
+		<span class="tag">TOOL</span>
+		<h1>Cross-Tab Finder</h1>
+		<p class="intro">
+			A single metric can only tell you it's off target, not why. This cross-tabs two metrics
+			against each other — CSAT vs. FCR, QA score vs. NPS, anything categorical — so you can see
+			the segments a single average hides. Paste rows straight from Excel or Sheets; nothing is
+			sent anywhere, it all runs in your browser.
+		</p>
+
+		<label class="field-label" for="data-input"
+			>Paste your data (tab-separated from a spreadsheet, or CSV) — first row as headers</label
+		>
+		<textarea class="tool-input data-textarea" id="data-input" rows="8"></textarea>
+		<div class="toolbar">
+			<button type="button" class="btn-ghost" id="load-sample-btn">Load sample data</button>
+			<button type="button" class="btn-ghost" id="clear-btn">Clear</button>
+		</div>
+
+		<div class="settings-row" id="column-select-row" hidden>
+			<label>Rows <select class="tool-input" id="row-col-select"></select></label>
+			<label>Columns <select class="tool-input" id="col-col-select"></select></label>
+		</div>
+
+		<div class="alert-banner tone-warn" id="warning-banner" hidden></div>
+
+		<div id="matrix-container" class="matrix-scroll"></div>
+
+		<div class="share-row" id="share-row" hidden>
+			<button type="button" class="btn-ghost" id="copy-summary-btn">Copy summary as text</button>
+			<span class="copy-feedback" id="copy-feedback"></span>
+		</div>
+	</section>
+</BaseLayout>
+
+<script>
+	import { parseTable, buildCrossTab, sampleData } from '../../lib/crosstab.js';
+
+	const STORAGE_KEY = 'cross-tab-finder-v1';
+
+	function rowsToText(rows) {
+		return rows.map((r) => r.join('\t')).join('\n');
+	}
+
+	function defaultState() {
+		return { rawText: rowsToText(sampleData()), rowColIndex: 0, colColIndex: 1 };
+	}
+
+	function loadState() {
+		try {
+			const saved = localStorage.getItem(STORAGE_KEY);
+			if (saved) {
+				const parsed = JSON.parse(saved);
+				if (parsed && typeof parsed.rawText === 'string') return parsed;
+			}
+		} catch (e) {
+			// localStorage unavailable
+		}
+		return defaultState();
+	}
+
+	let state = loadState();
+	let saveTimer;
+	function scheduleSave() {
+		clearTimeout(saveTimer);
+		saveTimer = setTimeout(() => {
+			try {
+				localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+			} catch (e) {
+				// non-fatal
+			}
+		}, 300);
+	}
+
+	const dataInput = document.getElementById('data-input');
+	const columnSelectRow = document.getElementById('column-select-row');
+	const rowColSelect = document.getElementById('row-col-select');
+	const colColSelect = document.getElementById('col-col-select');
+	const warningBanner = document.getElementById('warning-banner');
+	const matrixContainer = document.getElementById('matrix-container');
+	const shareRow = document.getElementById('share-row');
+
+	let currentParsed = null;
+	let currentCrossTab = null;
+
+	function populateColumnSelects(headers) {
+		for (const select of [rowColSelect, colColSelect]) {
+			select.innerHTML = '';
+			headers.forEach((h, i) => {
+				const opt = document.createElement('option');
+				opt.value = String(i);
+				opt.textContent = h || `Column ${i + 1}`;
+				select.appendChild(opt);
+			});
+		}
+		const rowIdx = state.rowColIndex < headers.length ? state.rowColIndex : 0;
+		const colIdx = state.colColIndex < headers.length ? state.colColIndex : Math.min(1, headers.length - 1);
+		rowColSelect.value = String(rowIdx);
+		colColSelect.value = String(colIdx);
+		state.rowColIndex = rowIdx;
+		state.colColIndex = colIdx;
+	}
+
+	function th(text, isRowHeader = false) {
+		const cell = document.createElement(isRowHeader ? 'th' : 'th');
+		cell.scope = isRowHeader ? 'row' : 'col';
+		cell.textContent = text;
+		return cell;
+	}
+
+	function cornerCell(rowLabel, colLabel) {
+		const cell = document.createElement('th');
+		cell.className = 'ct-corner';
+		cell.innerHTML = `<span class="ct-corner-row">${escapeHtml(rowLabel)}</span><span class="ct-corner-col">${escapeHtml(colLabel)}</span>`;
+		return cell;
+	}
+
+	function dataCell(cell, maxCell) {
+		const td = document.createElement('td');
+		td.className = 'ct-cell';
+		const intensity = maxCell > 0 ? cell.count / maxCell : 0;
+		td.style.background = `rgba(45, 226, 255, ${(intensity * 0.35).toFixed(3)})`;
+		td.innerHTML = `<span class="ct-count">${cell.count}</span><span class="ct-pct">${cell.pct.toFixed(1)}%</span>`;
+		return td;
+	}
+
+	function totalCell(count) {
+		const td = document.createElement('td');
+		td.className = 'ct-total-cell';
+		td.textContent = count;
+		return td;
+	}
+
+	function escapeHtml(str) {
+		const div = document.createElement('div');
+		div.textContent = str;
+		return div.innerHTML;
+	}
+
+	function renderMatrix() {
+		matrixContainer.innerHTML = '';
+		warningBanner.hidden = true;
+		shareRow.hidden = true;
+
+		if (!currentParsed) return;
+
+		const ct = buildCrossTab(
+			currentParsed.rows,
+			Number(rowColSelect.value),
+			Number(colColSelect.value)
+		);
+		currentCrossTab = ct;
+
+		if (ct.tooMany) {
+			warningBanner.hidden = false;
+			warningBanner.textContent = `One of these columns has too many distinct values to show as a grid (${ct.rowDistinctCount} row values, ${ct.colDistinctCount} column values — max ${12}). Pick a more categorical column.`;
+			return;
+		}
+
+		if (ct.total === 0) {
+			warningBanner.hidden = false;
+			warningBanner.className = 'alert-banner tone-warn';
+			warningBanner.textContent = 'No complete rows for this column pair — check that both columns have values.';
+			return;
+		}
+
+		const rowHeaderName = currentParsed.headers[Number(rowColSelect.value)] || 'Rows';
+		const colHeaderName = currentParsed.headers[Number(colColSelect.value)] || 'Columns';
+
+		const table = document.createElement('table');
+		table.className = 'crosstab-table';
+
+		const thead = document.createElement('thead');
+		const headRow = document.createElement('tr');
+		headRow.appendChild(cornerCell(rowHeaderName, colHeaderName));
+		for (const cv of ct.colList) headRow.appendChild(th(cv));
+		headRow.appendChild(th('Total'));
+		thead.appendChild(headRow);
+		table.appendChild(thead);
+
+		const tbody = document.createElement('tbody');
+		ct.rowList.forEach((rv, i) => {
+			const tr = document.createElement('tr');
+			tr.appendChild(th(rv, true));
+			ct.colList.forEach((cv, j) => {
+				tr.appendChild(dataCell(ct.matrix[i][j], ct.maxCell));
+			});
+			tr.appendChild(totalCell(ct.rowTotals[i]));
+			tbody.appendChild(tr);
+		});
+
+		const totalsTr = document.createElement('tr');
+		totalsTr.className = 'totals-row';
+		totalsTr.appendChild(th('Total', true));
+		ct.colTotals.forEach((t) => totalsTr.appendChild(totalCell(t)));
+		totalsTr.appendChild(totalCell(ct.total));
+		tbody.appendChild(totalsTr);
+
+		table.appendChild(tbody);
+		matrixContainer.appendChild(table);
+		shareRow.hidden = false;
+	}
+
+	function handleTextChange() {
+		state.rawText = dataInput.value;
+		currentParsed = parseTable(state.rawText);
+
+		if (!currentParsed) {
+			columnSelectRow.hidden = true;
+			warningBanner.hidden = false;
+			warningBanner.className = 'alert-banner tone-warn';
+			warningBanner.textContent = 'Paste at least a header row and one data row to get started.';
+			matrixContainer.innerHTML = '';
+			shareRow.hidden = true;
+			return;
+		}
+
+		columnSelectRow.hidden = false;
+		populateColumnSelects(currentParsed.headers);
+		renderMatrix();
+		scheduleSave();
+	}
+
+	dataInput.addEventListener('input', handleTextChange);
+	rowColSelect.addEventListener('change', () => {
+		state.rowColIndex = Number(rowColSelect.value);
+		renderMatrix();
+		scheduleSave();
+	});
+	colColSelect.addEventListener('change', () => {
+		state.colColIndex = Number(colColSelect.value);
+		renderMatrix();
+		scheduleSave();
+	});
+
+	document.getElementById('load-sample-btn').addEventListener('click', () => {
+		dataInput.value = rowsToText(sampleData());
+		state.rowColIndex = 0;
+		state.colColIndex = 1;
+		handleTextChange();
+	});
+
+	document.getElementById('clear-btn').addEventListener('click', () => {
+		dataInput.value = '';
+		handleTextChange();
+	});
+
+	function flashCopyFeedback(message) {
+		const el = document.getElementById('copy-feedback');
+		el.textContent = message;
+		setTimeout(() => {
+			if (el.textContent === message) el.textContent = '';
+		}, 2000);
+	}
+
+	document.getElementById('copy-summary-btn').addEventListener('click', async () => {
+		if (!currentCrossTab || currentCrossTab.tooMany) return;
+		const ct = currentCrossTab;
+		const rowHeaderName = currentParsed.headers[Number(rowColSelect.value)] || 'Rows';
+		const colHeaderName = currentParsed.headers[Number(colColSelect.value)] || 'Columns';
+		const lines = [`${rowHeaderName} \\ ${colHeaderName}\t${ct.colList.join('\t')}\tTotal`];
+		ct.rowList.forEach((rv, i) => {
+			const cells = ct.matrix[i].map((c) => `${c.count} (${c.pct.toFixed(1)}%)`);
+			lines.push(`${rv}\t${cells.join('\t')}\t${ct.rowTotals[i]}`);
+		});
+		lines.push(`Total\t${ct.colTotals.join('\t')}\t${ct.total}`);
+		try {
+			await navigator.clipboard.writeText(lines.join('\n'));
+			flashCopyFeedback('Summary copied.');
+		} catch (e) {
+			flashCopyFeedback('Could not copy to clipboard.');
+		}
+	});
+
+	// initial render
+	dataInput.value = state.rawText;
+	handleTextChange();
+</script>
+
+<style is:global>
+	.field-label {
+		display: block;
+		font-size: 0.8rem;
+		color: var(--text-muted);
+		margin: 32px 0 8px;
+	}
+	.data-textarea {
+		width: 100%;
+		resize: vertical;
+		line-height: 1.5;
+	}
+
+	#column-select-row {
+		margin-top: 20px;
+	}
+
+	.matrix-scroll {
+		overflow-x: auto;
+		margin-top: 24px;
+	}
+	.crosstab-table {
+		width: 100%;
+		min-width: 480px;
+		border-collapse: collapse;
+		font-size: 0.85rem;
+	}
+	.crosstab-table th,
+	.crosstab-table td {
+		border: 1px solid var(--border);
+		padding: 10px 12px;
+		text-align: center;
+	}
+	.crosstab-table thead th {
+		color: var(--text-muted);
+		font-weight: 700;
+		background: var(--bg-panel);
+	}
+	.crosstab-table tbody th {
+		text-align: left;
+		color: var(--text);
+		font-weight: 700;
+		background: var(--bg-panel);
+	}
+	.ct-corner {
+		background: var(--bg-panel);
+		text-align: left;
+		font-size: 0.7rem;
+		color: var(--text-dim);
+		position: relative;
+	}
+	.ct-corner-row {
+		display: block;
+	}
+	.ct-corner-col {
+		display: block;
+		text-align: right;
+		color: var(--cyan);
+	}
+	.ct-cell {
+		vertical-align: middle;
+	}
+	.ct-count {
+		display: block;
+		font-size: 1.1rem;
+		font-weight: 700;
+		color: var(--text);
+	}
+	.ct-pct {
+		display: block;
+		font-size: 0.7rem;
+		color: var(--text-dim);
+	}
+	.totals-row td,
+	.totals-row th {
+		border-top: 2px solid var(--border-bright);
+		font-weight: 700;
+		color: var(--text-muted);
+	}
+	.ct-total-cell {
+		color: var(--text-muted);
+		font-weight: 700;
+	}
+</style>
