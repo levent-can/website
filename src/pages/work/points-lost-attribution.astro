@@ -1,0 +1,174 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+const comparison = [
+	{ attr: 'Refund-decision accuracy', tier: 'Fail-all', naive: '9.0%', structural: '29.0%' },
+	{ attr: 'System-action completion', tier: 'Fail-all', naive: '5.2%', structural: '16.9%' },
+	{ attr: 'Compensation-decision accuracy', tier: 'Fail-all', naive: '6.0%', structural: '16.9%' },
+	{ attr: 'Contact-reason tagging', tier: 'Fail-section', naive: '16.5%', structural: '5.8%' },
+	{ attr: 'Responsiveness', tier: 'Fail-section', naive: '15.7%', structural: '5.1%' },
+	{ attr: 'Closing tone', tier: 'Fail-section', naive: '15.0%', structural: '4.6%' },
+];
+---
+
+<BaseLayout
+	title={`Why "Points Lost by Fail Rate" Was Quietly Wrong — Levent Can`}
+	description="A proportional attribution method looked reasonable and was structurally wrong — fail-all attributes were understated by up to 3x. Rebuilding the attribution at the evaluation level fixed it."
+>
+	<section class="section prose">
+		<a class="back" href="/work">← Work</a>
+		<span class="tag">CASE STUDY</span>
+		<h1>Why "Points Lost by Fail Rate" Was Quietly Wrong</h1>
+		<p class="lede">
+			A method that looked clean and reasonable was structurally understating the attributes doing
+			the most damage — by up to 3x.
+		</p>
+
+		<h3>Problem</h3>
+		<p>
+			Needed to know which QA attributes were actually driving point loss week over week — not
+			just which failed most often, but how many of the score's lost points each one was really
+			responsible for. A first-pass method — distribute total points lost proportionally by each
+			attribute's share of total fails — looked clean and produced a plausible-looking table.
+		</p>
+
+		<h3>Data</h3>
+		<p>
+			Evaluation-level QA data: one row per evaluation, each attribute's applicable/fail flag,
+			attribute weights, and each attribute's fail tier.
+		</p>
+
+		<h3>Analysis</h3>
+		<p>
+			The scorecard had two different fail mechanics: some attributes were "fail-all" (any fail
+			zeroes the entire evaluation), others were "fail-section" (a fail only zeroes that section's
+			weight). The proportional method treated every attribute's fail as an equivalent unit, but a
+			fail-all attribute can destroy the entire score while a fail-section attribute destroys at
+			most its own section's weight — so fail-share alone systematically understated fail-all
+			attributes' real damage and overstated fail-section attributes'.
+		</p>
+		<p>
+			There was also a co-occurrence problem: when multiple fail-all attributes fired on the same
+			evaluation, the eval scored zero regardless of which one "caused" it, so attribution needed an
+			explicit rule for splitting shared responsibility, not just a count.
+		</p>
+
+		<h3>Solution</h3>
+		<p>
+			Rebuilt the attribution at the evaluation level instead of on pre-aggregated data: for each
+			evaluation, if a fail-all attribute fired, its full point deficit is split across whichever
+			fail-all attributes co-fired; otherwise, the deficit is split only across the fail-section
+			attributes that fired within that section. Built as live formulas over the raw data, not a
+			one-off calculation, so it recalculates automatically as new weeks come in — validated by
+			confirming every evaluation's attribute-level losses sum back exactly to its actual score
+			deficit, across several thousand evaluations, with zero residual.
+		</p>
+
+		<h3>Result</h3>
+		<p>
+			The corrected attribution moved several attributes by up to ~3x relative to the naive method.
+			One week's breakdown, attribute names generalized:
+		</p>
+
+		<div class="table-scroll">
+			<table class="compare-table">
+				<thead>
+					<tr>
+						<th>Attribute</th>
+						<th>Fail tier</th>
+						<th>Naive fail-share</th>
+						<th>Structural share</th>
+					</tr>
+				</thead>
+				<tbody>
+					{
+						comparison.map((row) => (
+							<tr>
+								<td>{row.attr}</td>
+								<td>
+									<span class={`tier tier-${row.tier === 'Fail-all' ? 'all' : 'section'}`}>
+										{row.tier}
+									</span>
+								</td>
+								<td>{row.naive}</td>
+								<td class="structural-cell">{row.structural}</td>
+							</tr>
+						))
+					}
+				</tbody>
+			</table>
+		</div>
+		<p class="table-note">
+			Fail-all attributes were understated by up to ~3x under the naive method; fail-section
+			attributes were overstated by a similar margin. The corrected model changed which attributes
+			actually looked like the priority.
+		</p>
+	</section>
+</BaseLayout>
+
+<style>
+	.back {
+		display: block;
+		font-size: 0.8rem;
+		color: var(--text-muted);
+		border: none;
+		margin-bottom: 20px;
+	}
+	.back:hover {
+		color: var(--cyan);
+	}
+	.lede {
+		font-size: 1.2rem;
+		color: var(--cyan);
+		max-width: 55ch;
+		margin: 4px 0 40px;
+	}
+
+	.table-scroll {
+		overflow-x: auto;
+		margin: 20px 0 12px;
+	}
+	.compare-table {
+		width: 100%;
+		min-width: 480px;
+		border-collapse: collapse;
+		font-size: 0.85rem;
+	}
+	.compare-table th,
+	.compare-table td {
+		border: 1px solid var(--border);
+		padding: 10px 12px;
+		text-align: left;
+	}
+	.compare-table thead th {
+		color: var(--text-muted);
+		font-weight: 700;
+		background: var(--bg-panel);
+	}
+	.structural-cell {
+		color: var(--cyan);
+		font-weight: 700;
+	}
+	.tier {
+		font-size: 0.72rem;
+		letter-spacing: 0.04em;
+		padding: 2px 8px;
+		border-radius: 3px;
+		border: 1px solid var(--border-bright);
+		white-space: nowrap;
+	}
+	.tier-all {
+		color: var(--magenta);
+		border-color: var(--magenta);
+		background: rgba(255, 46, 196, 0.08);
+	}
+	.tier-section {
+		color: var(--violet);
+		border-color: var(--violet);
+		background: rgba(155, 92, 255, 0.08);
+	}
+	.table-note {
+		font-size: 0.85rem;
+		color: var(--text-dim);
+	}
+</style>
