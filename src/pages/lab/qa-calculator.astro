@@ -5,7 +5,7 @@ import '../../styles/tool.css';
 
 <BaseLayout
 	title="QA Calculator — Levent Can"
-	description="A configurable QA scorecard calculator: weighted categories, zero-tolerance critical fails, runs entirely in your browser."
+	description="A configurable QA scorecard calculator: weighted categories, fail-all and fail-section zero-tolerance tiers, runs entirely in your browser."
 >
 	<section class="section prose-wide">
 		<a class="back" href="/lab">← Lab</a>
@@ -13,8 +13,9 @@ import '../../styles/tool.css';
 		<h1>QA Calculator</h1>
 		<p class="intro">
 			Build a weighted QA scorecard, score an evaluation against it, and get a live result —
-			including zero-tolerance critical fails. Nothing here is sent anywhere; it all runs in your
-			browser and is remembered locally on this device.
+			including two tiers of zero-tolerance: a <strong>fail-all</strong> attribute zeroes the whole
+			evaluation, a <strong>fail-section</strong> attribute only zeroes its own section. Nothing here
+			is sent anywhere; it all runs in your browser and is remembered locally on this device.
 		</p>
 
 		<div class="toolbar">
@@ -33,8 +34,13 @@ import '../../styles/tool.css';
 				%</label
 			>
 			<label
-				>Critical fail caps score at
-				<input class="tool-input" type="number" id="ceiling-input" min="0" max="100" /> %</label
+				>Fail-all caps score at
+				<input class="tool-input" type="number" id="fail-all-ceiling-input" min="0" max="100" /> %</label
+			>
+			<label
+				>Fail-section caps section at
+				<input class="tool-input" type="number" id="fail-section-ceiling-input" min="0" max="100" />
+				%</label
 			>
 		</div>
 
@@ -46,7 +52,8 @@ import '../../styles/tool.css';
 				<div class="score-number" id="score-number">—</div>
 				<div class="score-status" id="score-status"></div>
 			</div>
-			<div class="alert-banner tone-bad" id="critical-banner" hidden></div>
+			<div class="alert-banner tone-bad" id="fail-all-banner" hidden></div>
+			<div class="alert-banner tone-warn" id="fail-section-banner" hidden></div>
 			<ul class="breakdown-list" id="breakdown-list"></ul>
 		</div>
 
@@ -70,7 +77,12 @@ import '../../styles/tool.css';
 	const STORAGE_KEY = 'qa-calculator-v1';
 
 	function defaultState() {
-		return { categories: presetCustomerService(), target: 85, ceiling: 0 };
+		return {
+			categories: presetCustomerService(),
+			target: 85,
+			failAllCeiling: 0,
+			failSectionCeiling: 0,
+		};
 	}
 
 	function loadState() {
@@ -111,7 +123,8 @@ import '../../styles/tool.css';
 
 	const categoriesEl = document.getElementById('categories');
 	const targetInput = document.getElementById('target-input');
-	const ceilingInput = document.getElementById('ceiling-input');
+	const failAllCeilingInput = document.getElementById('fail-all-ceiling-input');
+	const failSectionCeilingInput = document.getElementById('fail-section-ceiling-input');
 
 	function findCategory(id) {
 		return state.categories.find((c) => c.id === id);
@@ -189,7 +202,7 @@ import '../../styles/tool.css';
 			category.attributes.push({
 				id: nextId('attr'),
 				name: 'New attribute',
-				critical: false,
+				tier: 'normal',
 				status: 'unscored',
 			});
 			renderCategories();
@@ -206,17 +219,29 @@ import '../../styles/tool.css';
 		row.className = 'attribute';
 		row.dataset.id = attribute.id;
 
-		const criticalLabel = document.createElement('label');
-		criticalLabel.className = 'critical-toggle';
-		const criticalCheckbox = document.createElement('input');
-		criticalCheckbox.type = 'checkbox';
-		criticalCheckbox.checked = attribute.critical;
-		criticalCheckbox.addEventListener('change', () => {
-			attribute.critical = criticalCheckbox.checked;
+		const tierWrap = document.createElement('label');
+		tierWrap.className = 'tier-select-wrap';
+		const tierSelect = document.createElement('select');
+		tierSelect.className = 'tier-select';
+		tierSelect.dataset.tier = attribute.tier;
+		for (const [value, label] of [
+			['normal', 'Normal'],
+			['failSection', 'Fail Section'],
+			['failAll', 'Fail All'],
+		]) {
+			const opt = document.createElement('option');
+			opt.value = value;
+			opt.textContent = label;
+			if (attribute.tier === value) opt.selected = true;
+			tierSelect.appendChild(opt);
+		}
+		tierSelect.addEventListener('change', () => {
+			attribute.tier = tierSelect.value;
+			tierSelect.dataset.tier = attribute.tier;
 			renderResults();
 			scheduleSave();
 		});
-		criticalLabel.append(criticalCheckbox, document.createTextNode('Critical'));
+		tierWrap.appendChild(tierSelect);
 
 		const nameInput = document.createElement('input');
 		nameInput.className = 'attr-name tool-input';
@@ -267,20 +292,22 @@ import '../../styles/tool.css';
 
 		const bottomRow = document.createElement('div');
 		bottomRow.className = 'attribute-bottom';
-		bottomRow.append(criticalLabel, statusGroup);
+		bottomRow.append(tierWrap, statusGroup);
 
 		row.append(topRow, bottomRow);
 		return row;
 	}
 
 	function renderResults() {
-		const ceiling = Number(ceilingInput.value) || 0;
+		const failAllCeiling = Number(failAllCeilingInput.value) || 0;
+		const failSectionCeiling = Number(failSectionCeilingInput.value) || 0;
 		const target = Number(targetInput.value) || 0;
-		const result = scoreOverall(state.categories, ceiling);
+		const result = scoreOverall(state.categories, { failAllCeiling, failSectionCeiling });
 
 		const scoreNumberEl = document.getElementById('score-number');
 		const scoreStatusEl = document.getElementById('score-status');
-		const bannerEl = document.getElementById('critical-banner');
+		const failAllBannerEl = document.getElementById('fail-all-banner');
+		const failSectionBannerEl = document.getElementById('fail-section-banner');
 		const breakdownEl = document.getElementById('breakdown-list');
 
 		if (result.overall === null) {
@@ -289,24 +316,28 @@ import '../../styles/tool.css';
 			scoreStatusEl.textContent = 'Awaiting scoring';
 		} else {
 			scoreNumberEl.textContent = `${result.overall.toFixed(1)}%`;
-			const pass = result.overall >= target && !result.criticalFail;
+			const pass = result.overall >= target && result.failAllAttrs.length === 0;
 			scoreNumberEl.className = `score-number ${pass ? 'pass' : 'fail'}`;
 			scoreStatusEl.textContent = pass
 				? `Above target (${target}%)`
 				: `Below target (${target}%)`;
 		}
 
-		if (result.criticalFail) {
-			const failedAttrs = [];
-			for (const c of state.categories) {
-				for (const a of c.attributes) {
-					if (a.critical && a.status === 'fail') failedAttrs.push(a.name);
-				}
-			}
-			bannerEl.hidden = false;
-			bannerEl.textContent = `⚠ Critical fail — "${failedAttrs.join('", "')}" — score capped at ${ceiling}%.`;
+		if (result.failAllAttrs.length > 0) {
+			failAllBannerEl.hidden = false;
+			failAllBannerEl.textContent = `⚠ Fail-all — "${result.failAllAttrs.join('", "')}" — score capped at ${failAllCeiling}%.`;
 		} else {
-			bannerEl.hidden = true;
+			failAllBannerEl.hidden = true;
+		}
+
+		if (result.failSectionAttrs.length > 0) {
+			failSectionBannerEl.hidden = false;
+			const parts = result.failSectionAttrs.map(
+				(f) => `"${f.attrName}" capped "${f.categoryName}" at ${failSectionCeiling}%`
+			);
+			failSectionBannerEl.textContent = `⚠ Fail-section — ${parts.join('; ')}.`;
+		} else {
+			failSectionBannerEl.hidden = true;
 		}
 
 		breakdownEl.innerHTML = '';
@@ -326,9 +357,15 @@ import '../../styles/tool.css';
 	}
 
 	function applyPreset(presetFn) {
-		state = { categories: presetFn(), target: state.target ?? 85, ceiling: state.ceiling ?? 0 };
+		state = {
+			categories: presetFn(),
+			target: state.target ?? 85,
+			failAllCeiling: state.failAllCeiling ?? 0,
+			failSectionCeiling: state.failSectionCeiling ?? 0,
+		};
 		targetInput.value = String(state.target);
-		ceilingInput.value = String(state.ceiling);
+		failAllCeilingInput.value = String(state.failAllCeiling);
+		failSectionCeilingInput.value = String(state.failSectionCeiling);
 		renderCategories();
 		renderResults();
 		scheduleSave();
@@ -344,7 +381,8 @@ import '../../styles/tool.css';
 	document.getElementById('reset-btn').addEventListener('click', () => {
 		state = defaultState();
 		targetInput.value = String(state.target);
-		ceilingInput.value = String(state.ceiling);
+		failAllCeilingInput.value = String(state.failAllCeiling);
+		failSectionCeilingInput.value = String(state.failSectionCeiling);
 		renderCategories();
 		renderResults();
 		scheduleSave();
@@ -362,8 +400,13 @@ import '../../styles/tool.css';
 		renderResults();
 		scheduleSave();
 	});
-	ceilingInput.addEventListener('input', () => {
-		state.ceiling = Number(ceilingInput.value) || 0;
+	failAllCeilingInput.addEventListener('input', () => {
+		state.failAllCeiling = Number(failAllCeilingInput.value) || 0;
+		renderResults();
+		scheduleSave();
+	});
+	failSectionCeilingInput.addEventListener('input', () => {
+		state.failSectionCeiling = Number(failSectionCeilingInput.value) || 0;
 		renderResults();
 		scheduleSave();
 	});
@@ -387,12 +430,18 @@ import '../../styles/tool.css';
 	});
 
 	document.getElementById('copy-summary-btn').addEventListener('click', async () => {
-		const ceiling = Number(ceilingInput.value) || 0;
+		const failAllCeiling = Number(failAllCeilingInput.value) || 0;
+		const failSectionCeiling = Number(failSectionCeilingInput.value) || 0;
 		const target = Number(targetInput.value) || 0;
-		const result = scoreOverall(state.categories, ceiling);
+		const result = scoreOverall(state.categories, { failAllCeiling, failSectionCeiling });
 		const lines = [
 			`QA Score: ${result.overall === null ? '—' : result.overall.toFixed(1) + '%'} (target ${target}%)`,
-			result.criticalFail ? 'CRITICAL FAIL — score capped.' : '',
+			result.failAllAttrs.length > 0
+				? `FAIL-ALL — "${result.failAllAttrs.join('", "')}" — score capped.`
+				: '',
+			result.failSectionAttrs.length > 0
+				? `FAIL-SECTION — ${result.failSectionAttrs.map((f) => `"${f.attrName}" capped "${f.categoryName}"`).join('; ')}.`
+				: '',
 			'',
 			...state.categories.map((c) => {
 				const entry = result.categoryScores.find((s) => s.id === c.id);
@@ -409,7 +458,8 @@ import '../../styles/tool.css';
 
 	// initial render
 	targetInput.value = String(state.target ?? 85);
-	ceilingInput.value = String(state.ceiling ?? 0);
+	failAllCeilingInput.value = String(state.failAllCeiling ?? 0);
+	failSectionCeilingInput.value = String(state.failSectionCeiling ?? 0);
 	renderCategories();
 	renderResults();
 </script>
@@ -473,13 +523,29 @@ import '../../styles/tool.css';
 		gap: 14px;
 		flex-wrap: wrap;
 	}
-	.critical-toggle {
+	.tier-select-wrap {
 		display: flex;
 		align-items: center;
-		gap: 4px;
+	}
+	.tier-select {
+		font-family: var(--font-mono);
 		font-size: 0.7rem;
+		padding: 4px 6px;
+		border-radius: 3px;
+		border: 1px solid var(--border-bright);
+		background: transparent;
+		color: var(--text-dim);
+		cursor: pointer;
+	}
+	.tier-select[data-tier='failAll'] {
 		color: var(--magenta);
-		white-space: nowrap;
+		border-color: var(--magenta);
+		background: rgba(255, 46, 196, 0.08);
+	}
+	.tier-select[data-tier='failSection'] {
+		color: var(--violet);
+		border-color: var(--violet);
+		background: rgba(155, 92, 255, 0.08);
 	}
 	.attr-name {
 		flex: 1;
