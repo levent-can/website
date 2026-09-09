@@ -1,5 +1,10 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
+import { caseStudies } from '../data/work.js';
+import { tools } from '../data/lab.js';
+
+const latestCaseStudy = caseStudies[caseStudies.length - 1];
+const latestTool = tools[tools.length - 1];
 ---
 
 <BaseLayout
@@ -26,12 +31,22 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
 	<section class="section container">
 		<h3>Selected work</h3>
-		<p>Case studies are being written. <a href="/work">Visit /work</a> to check progress.</p>
+		<div class="featured">
+			<a href={latestCaseStudy.slug}>{latestCaseStudy.title}</a>
+			<p>{latestCaseStudy.summary}</p>
+		</div>
+		<p class="see-all">
+			<a href="/work">See all {caseStudies.length} case studies on /work →</a>
+		</p>
 	</section>
 
 	<section class="section container">
 		<h3>Lab</h3>
-		<p>Working analytics tools, built to be used. <a href="/lab">Visit /lab</a> to check progress.</p>
+		<div class="featured">
+			<a href={latestTool.slug}>{latestTool.title}</a>
+			<p>{latestTool.summary}</p>
+		</div>
+		<p class="see-all"><a href="/lab">See all {tools.length} tools on /lab →</a></p>
 	</section>
 </BaseLayout>
 
@@ -58,5 +73,29 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 	.intro {
 		max-width: 60ch;
 		color: var(--text-muted);
+	}
+
+	.featured {
+		border-left: 2px solid var(--violet);
+		padding-left: 16px;
+		margin-top: 16px;
+	}
+	.featured a {
+		font-size: 1.1rem;
+		font-weight: 700;
+		color: var(--text);
+		border: none;
+	}
+	.featured a:hover {
+		color: var(--cyan);
+	}
+	.featured p {
+		margin: 6px 0 0;
+		color: var(--text-muted);
+		max-width: 65ch;
+	}
+	.see-all {
+		margin-top: 16px;
+		font-size: 0.9rem;
 	}
 </style>

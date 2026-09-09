@@ -1,32 +1,6 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
-
-const tools = [
-	{
-		slug: '/lab/qa-calculator',
-		title: 'QA Calculator',
-		summary:
-			'Build a weighted QA scorecard with zero-tolerance critical fails, score an evaluation, get a live result. Runs entirely in your browser.',
-	},
-	{
-		slug: '/lab/nps-calculator',
-		title: 'NPS Confidence Calculator',
-		summary:
-			'NPS is a difference of two proportions, not a single trustworthy number — see the real margin of error for your sample size, and how many responses you actually need.',
-	},
-	{
-		slug: '/lab/cross-tab-finder',
-		title: 'Cross-Tab Finder',
-		summary:
-			'Paste two metrics side by side and see where they diverge — the same technique behind the case studies on this site, as a tool you can run on your own data.',
-	},
-	{
-		slug: '/lab/contact-center-simulator',
-		title: 'Contact Center Simulator',
-		summary:
-			'Erlang C staffing calculator with live sliders — volume and handle time in, required agents and service level out, plus a chart showing how non-linear that relationship really is.',
-	},
-];
+import { tools } from '../data/lab.js';
 ---
 
 <BaseLayout
@@ -34,7 +8,7 @@ const tools = [
 	description="Working analytics tools and small interactive experiments, built to be used, not just looked at."
 >
 	<section class="section prose">
-		<span class="tag">4 TOOLS, MORE COMING</span>
+		<span class="tag">{tools.length} TOOLS, MORE COMING</span>
 		<h1>Lab</h1>
 		<p>
 			Small, working tools — calculators, simulators, and data utilities that run entirely in
