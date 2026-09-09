@@ -1,0 +1,354 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import '../../styles/tool.css';
+---
+
+<BaseLayout
+	title="Contact Center Simulator — Levent Can"
+	description="Erlang C staffing calculator with live sliders: volume and handle time in, required agents and service level out — plus a chart showing how non-linear that relationship actually is."
+>
+	<section class="section prose-wide">
+		<a class="back" href="/lab">← Lab</a>
+		<span class="tag">TOOL</span>
+		<h1>Contact Center Simulator</h1>
+		<p class="intro">
+			Erlang C — the formula contact centers actually use to size staffing. Drag the sliders and
+			watch required agents and service level update live. The chart at the bottom is the
+			interesting part: service level doesn't move gradually with agent count, it can swing hard
+			with just one agent either way.
+		</p>
+
+		<div class="sliders">
+			<div class="slider-row">
+				<label for="volume-input">Volume <span class="hint">contacts per interval</span></label>
+				<div class="slider-control">
+					<input type="range" id="volume-input" min="1" max="1000" step="1" />
+					<span class="slider-value" id="volume-value"></span>
+				</div>
+			</div>
+			<div class="slider-row">
+				<label for="aht-input">AHT <span class="hint">average handle time, seconds</span></label>
+				<div class="slider-control">
+					<input type="range" id="aht-input" min="30" max="1200" step="5" />
+					<span class="slider-value" id="aht-value"></span>
+				</div>
+			</div>
+			<div class="slider-row">
+				<label for="interval-select">Interval length</label>
+				<div class="slider-control">
+					<select class="tool-input" id="interval-select">
+						<option value="900">15 min</option>
+						<option value="1800" selected>30 min</option>
+						<option value="3600">60 min</option>
+					</select>
+				</div>
+			</div>
+			<div class="slider-row">
+				<label for="target-sl-input">Target service level <span class="hint">%</span></label>
+				<div class="slider-control">
+					<input type="range" id="target-sl-input" min="50" max="99" step="1" />
+					<span class="slider-value" id="target-sl-value"></span>
+				</div>
+			</div>
+			<div class="slider-row">
+				<label for="target-time-input"
+					>Within <span class="hint">target answer time, seconds</span></label
+				>
+				<div class="slider-control">
+					<input type="range" id="target-time-input" min="5" max="120" step="1" />
+					<span class="slider-value" id="target-time-value"></span>
+				</div>
+			</div>
+			<div class="slider-row">
+				<label for="shrinkage-input">Shrinkage <span class="hint">%</span></label>
+				<div class="slider-control">
+					<input type="range" id="shrinkage-input" min="0" max="50" step="1" />
+					<span class="slider-value" id="shrinkage-value"></span>
+				</div>
+			</div>
+		</div>
+
+		<div class="results-panel">
+			<div class="score-display">
+				<div class="score-number pass" id="agents-number">—</div>
+				<div class="score-status">agents required on the phones</div>
+			</div>
+			<div class="alert-banner tone-warn" id="unstable-banner" hidden>
+				⚠ Offered load exceeds what's achievable in a reasonable agent range — reduce volume/AHT or
+				raise the interval length.
+			</div>
+			<ul class="breakdown-list" id="results-breakdown"></ul>
+		</div>
+
+		<h3 class="sensitivity-heading">Agents vs. service level</h3>
+		<p class="panel-note">
+			Same offered load, one agent at a time. Notice how little room there often is between "well
+			under target" and "comfortably over."
+		</p>
+		<div class="sensitivity-chart" id="sensitivity-chart"></div>
+	</section>
+</BaseLayout>
+
+<script>
+	import {
+		offeredLoad,
+		serviceLevel,
+		requiredAgents,
+		occupancy,
+		averageSpeedOfAnswer,
+		erlangC,
+		requiredStaffing,
+	} from '../../lib/erlang.js';
+
+	const STORAGE_KEY = 'contact-center-simulator-v1';
+
+	function defaultState() {
+		return {
+			volume: 100,
+			aht: 240,
+			interval: 1800,
+			targetSL: 80,
+			targetTime: 20,
+			shrinkage: 30,
+		};
+	}
+
+	function loadState() {
+		try {
+			const saved = localStorage.getItem(STORAGE_KEY);
+			if (saved) {
+				const parsed = JSON.parse(saved);
+				if (parsed && typeof parsed.volume === 'number') return { ...defaultState(), ...parsed };
+			}
+		} catch (e) {
+			// localStorage unavailable
+		}
+		return defaultState();
+	}
+
+	let state = loadState();
+	let saveTimer;
+	function scheduleSave() {
+		clearTimeout(saveTimer);
+		saveTimer = setTimeout(() => {
+			try {
+				localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+			} catch (e) {
+				// non-fatal
+			}
+		}, 300);
+	}
+
+	const volumeInput = document.getElementById('volume-input');
+	const ahtInput = document.getElementById('aht-input');
+	const intervalSelect = document.getElementById('interval-select');
+	const targetSlInput = document.getElementById('target-sl-input');
+	const targetTimeInput = document.getElementById('target-time-input');
+	const shrinkageInput = document.getElementById('shrinkage-input');
+
+	function fmtSeconds(s) {
+		if (s >= 60) {
+			const m = Math.floor(s / 60);
+			const rem = s % 60;
+			return rem === 0 ? `${m}m` : `${m}m ${rem}s`;
+		}
+		return `${s}s`;
+	}
+
+	function render() {
+		document.getElementById('volume-value').textContent = String(state.volume);
+		document.getElementById('aht-value').textContent = fmtSeconds(state.aht);
+		document.getElementById('target-sl-value').textContent = `${state.targetSL}%`;
+		document.getElementById('target-time-value').textContent = `${state.targetTime}s`;
+		document.getElementById('shrinkage-value').textContent = `${state.shrinkage}%`;
+
+		const a = offeredLoad(state.volume, state.aht, state.interval);
+		const n = requiredAgents(a, state.aht, state.targetTime, state.targetSL / 100);
+
+		const agentsNumberEl = document.getElementById('agents-number');
+		const unstableBanner = document.getElementById('unstable-banner');
+		const breakdownEl = document.getElementById('results-breakdown');
+
+		if (n === null) {
+			agentsNumberEl.textContent = '—';
+			unstableBanner.hidden = false;
+			breakdownEl.innerHTML = '';
+			document.getElementById('sensitivity-chart').innerHTML = '';
+			scheduleSave();
+			return;
+		}
+
+		unstableBanner.hidden = true;
+		agentsNumberEl.textContent = String(n);
+
+		const sl = serviceLevel(n, a, state.aht, state.targetTime);
+		const occ = occupancy(n, a);
+		const asa = averageSpeedOfAnswer(n, a, state.aht);
+		const staffing = requiredStaffing(n, state.shrinkage);
+		const pImmediate = 1 - erlangC(n, a);
+
+		breakdownEl.innerHTML = '';
+		const rows = [
+			['Offered load', `${a.toFixed(2)} erlangs`, ''],
+			['Service level achieved', `${(sl * 100).toFixed(1)}%`, `target ${state.targetSL}%`],
+			['Occupancy', `${(occ * 100).toFixed(1)}%`, ''],
+			['Avg. speed of answer', asa === Infinity ? '—' : `${asa.toFixed(1)}s`, ''],
+			['Answered immediately', `${(pImmediate * 100).toFixed(1)}%`, ''],
+			['Required staffing (FTE)', staffing.toFixed(1), `after ${state.shrinkage}% shrinkage`],
+		];
+		for (const [label, value, note] of rows) {
+			const li = document.createElement('li');
+			li.innerHTML = `<span class="bd-name">${label}</span><span class="bd-weight">${note}</span><span class="bd-score">${value}</span>`;
+			breakdownEl.appendChild(li);
+		}
+
+		renderSensitivityChart(n, a);
+		scheduleSave();
+	}
+
+	function renderSensitivityChart(requiredN, a) {
+		const chart = document.getElementById('sensitivity-chart');
+		chart.innerHTML = '';
+		const lowN = Math.max(Math.floor(a) + 1, requiredN - 3);
+		const highN = requiredN + 3;
+
+		for (let n = lowN; n <= highN; n++) {
+			const sl = serviceLevel(n, a, state.aht, state.targetTime);
+			const pct = Math.max(0, Math.min(100, sl * 100));
+			const bar = document.createElement('div');
+			bar.className = 'sens-bar' + (n === requiredN ? ' sens-bar-active' : '');
+			bar.innerHTML = `
+				<span class="sens-pct">${pct.toFixed(1)}%</span>
+				<span class="sens-fill" style="height:${pct}%"></span>
+				<span class="sens-label">${n}</span>
+			`;
+			chart.appendChild(bar);
+		}
+
+		chart.style.setProperty('--target-line', `${state.targetSL}%`);
+	}
+
+	volumeInput.addEventListener('input', () => {
+		state.volume = Number(volumeInput.value);
+		render();
+	});
+	ahtInput.addEventListener('input', () => {
+		state.aht = Number(ahtInput.value);
+		render();
+	});
+	intervalSelect.addEventListener('change', () => {
+		state.interval = Number(intervalSelect.value);
+		render();
+	});
+	targetSlInput.addEventListener('input', () => {
+		state.targetSL = Number(targetSlInput.value);
+		render();
+	});
+	targetTimeInput.addEventListener('input', () => {
+		state.targetTime = Number(targetTimeInput.value);
+		render();
+	});
+	shrinkageInput.addEventListener('input', () => {
+		state.shrinkage = Number(shrinkageInput.value);
+		render();
+	});
+
+	// initial values
+	volumeInput.value = String(state.volume);
+	ahtInput.value = String(state.aht);
+	intervalSelect.value = String(state.interval);
+	targetSlInput.value = String(state.targetSL);
+	targetTimeInput.value = String(state.targetTime);
+	shrinkageInput.value = String(state.shrinkage);
+	render();
+</script>
+
+<style is:global>
+	.sliders {
+		display: flex;
+		flex-direction: column;
+		gap: 20px;
+		margin: 32px 0;
+	}
+	.slider-row label {
+		display: block;
+		font-size: 0.85rem;
+		color: var(--text-muted);
+		margin-bottom: 8px;
+	}
+	.slider-row .hint {
+		color: var(--text-dim);
+		font-size: 0.75rem;
+	}
+	.slider-control {
+		display: flex;
+		align-items: center;
+		gap: 14px;
+	}
+	.slider-control input[type='range'] {
+		flex: 1;
+		accent-color: var(--cyan);
+	}
+	.slider-value {
+		font-family: var(--font-mono);
+		color: var(--cyan);
+		min-width: 60px;
+		text-align: right;
+		font-size: 0.9rem;
+	}
+
+	.sensitivity-heading {
+		margin-top: 40px;
+	}
+	.panel-note {
+		font-size: 0.85rem;
+		color: var(--text-dim);
+		margin: 4px 0 20px;
+	}
+	.sensitivity-chart {
+		display: flex;
+		align-items: flex-end;
+		gap: 10px;
+		height: 180px;
+		padding: 16px;
+		border: 1px solid var(--border);
+		border-radius: 8px;
+		background: var(--bg-panel);
+	}
+	.sens-bar {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: flex-end;
+		height: 100%;
+		position: relative;
+	}
+	.sens-pct {
+		font-size: 0.7rem;
+		color: var(--text-dim);
+		margin-bottom: 4px;
+	}
+	.sens-fill {
+		width: 100%;
+		background: var(--violet);
+		border-radius: 3px 3px 0 0;
+		min-height: 2px;
+	}
+	.sens-bar-active .sens-fill {
+		background: var(--cyan);
+		box-shadow: 0 0 12px rgba(45, 226, 255, 0.5);
+	}
+	.sens-bar-active .sens-pct {
+		color: var(--cyan);
+	}
+	.sens-label {
+		margin-top: 8px;
+		font-size: 0.75rem;
+		color: var(--text-muted);
+	}
+	.sens-bar-active .sens-label {
+		color: var(--cyan);
+		font-weight: 700;
+	}
+</style>
