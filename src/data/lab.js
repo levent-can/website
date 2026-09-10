@@ -26,4 +26,10 @@ export const tools = [
 		summary:
 			'Erlang C staffing calculator with live sliders — volume and handle time in, required agents and service level out, plus a chart showing how non-linear that relationship really is.',
 	},
+	{
+		slug: '/lab/decision-tree-builder',
+		title: 'Decision Tree Builder',
+		summary:
+			'Turn a dense flowchart SOP into a guided, one-question-at-a-time tool — build the logic, then walk through it like the person using it would.',
+	},
 ];

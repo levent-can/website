@@ -1,0 +1,616 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import '../../styles/tool.css';
+---
+
+<BaseLayout
+	title="Decision Tree Builder — Levent Can"
+	description="Turn a complex SOP flowchart into a guided, one-question-at-a-time decision tree — build it here, then walk through it like the person using it would."
+>
+	<section class="section prose-wide">
+		<a class="back" href="/lab">← Lab</a>
+		<span class="tag">TOOL</span>
+		<h1>Decision Tree Builder</h1>
+		<p class="intro">
+			A dense flowchart is easy to build and hard to use mid-conversation. This turns the same
+			logic into one question at a time — build the tree, then try it as the person following it
+			would. Nothing here is sent anywhere; it all runs in your browser and is remembered locally
+			on this device.
+		</p>
+
+		<div class="mode-toggle">
+			<button type="button" class="btn-ghost mode-btn" id="play-mode-btn" data-mode="play"
+				>▶ Play</button
+			>
+			<button type="button" class="btn-ghost mode-btn" id="build-mode-btn" data-mode="build"
+				>✎ Build</button
+			>
+			<span class="mode-spacer"></span>
+			<button type="button" class="btn-ghost" id="load-sample-btn">Load example</button>
+			<button type="button" class="btn-ghost" id="reset-btn">Reset</button>
+		</div>
+
+		<!-- PLAY MODE -->
+		<div id="play-panel">
+			<h3 id="tree-title-display"></h3>
+
+			<div class="breadcrumb" id="breadcrumb"></div>
+
+			<div class="results-panel" id="player-card"></div>
+		</div>
+
+		<!-- BUILD MODE -->
+		<div id="build-panel" hidden>
+			<div class="settings-row">
+				<label class="tree-title-label"
+					>Tree title <input class="tool-input" type="text" id="tree-title-input" /></label
+				>
+				<label class="start-node-label"
+					>Start node
+					<select class="tool-input" id="start-node-select"></select>
+				</label>
+			</div>
+
+			<div class="alert-banner tone-warn" id="broken-links-banner" hidden></div>
+
+			<div id="nodes-container" class="nodes-container"></div>
+			<button type="button" class="btn-ghost" id="add-node-btn">+ Add node</button>
+		</div>
+
+		<div class="share-row">
+			<button type="button" class="btn-ghost" id="copy-link-btn">Copy shareable link</button>
+			<button type="button" class="btn-ghost" id="copy-path-btn" hidden>Copy path as text</button>
+			<span class="copy-feedback" id="copy-feedback"></span>
+		</div>
+	</section>
+</BaseLayout>
+
+<script>
+	import { sampleTree, blankTree, nextId, findBrokenLinks } from '../../lib/decision-tree.js';
+
+	const STORAGE_KEY = 'decision-tree-builder-v1';
+
+	function defaultState() {
+		return { mode: 'play', tree: sampleTree(), path: [] };
+	}
+
+	function loadState() {
+		try {
+			const params = new URLSearchParams(location.search);
+			const shared = params.get('s');
+			if (shared) {
+				const parsed = JSON.parse(decodeURIComponent(shared));
+				if (parsed && parsed.tree) return { mode: 'play', tree: parsed.tree, path: [] };
+			}
+		} catch (e) {
+			// ignore malformed share links
+		}
+		try {
+			const saved = localStorage.getItem(STORAGE_KEY);
+			if (saved) {
+				const parsed = JSON.parse(saved);
+				if (parsed && parsed.tree) return { mode: parsed.mode ?? 'play', tree: parsed.tree, path: [] };
+			}
+		} catch (e) {
+			// localStorage unavailable
+		}
+		return defaultState();
+	}
+
+	let state = loadState();
+	let saveTimer;
+	function scheduleSave() {
+		clearTimeout(saveTimer);
+		saveTimer = setTimeout(() => {
+			try {
+				localStorage.setItem(STORAGE_KEY, JSON.stringify({ mode: state.mode, tree: state.tree }));
+			} catch (e) {
+				// non-fatal
+			}
+		}, 300);
+	}
+
+	function escapeHtml(str) {
+		const div = document.createElement('div');
+		div.textContent = str ?? '';
+		return div.innerHTML;
+	}
+
+	// ---------- mode switching ----------
+
+	const playPanel = document.getElementById('play-panel');
+	const buildPanel = document.getElementById('build-panel');
+	const copyPathBtn = document.getElementById('copy-path-btn');
+
+	function setMode(mode) {
+		state.mode = mode;
+		playPanel.hidden = mode !== 'play';
+		buildPanel.hidden = mode !== 'build';
+		copyPathBtn.hidden = mode !== 'play';
+		document.querySelectorAll('.mode-btn').forEach((btn) => {
+			btn.classList.toggle('active', btn.dataset.mode === mode);
+		});
+		if (mode === 'play') {
+			state.path = [];
+			renderPlayer();
+		} else {
+			renderBuilder();
+		}
+		scheduleSave();
+	}
+
+	document.getElementById('play-mode-btn').addEventListener('click', () => setMode('play'));
+	document.getElementById('build-mode-btn').addEventListener('click', () => setMode('build'));
+
+	// ---------- player ----------
+
+	function renderPlayer() {
+		document.getElementById('tree-title-display').textContent = state.tree.title;
+
+		const breadcrumbEl = document.getElementById('breadcrumb');
+		breadcrumbEl.innerHTML = '';
+		state.path.forEach((step, i) => {
+			const chip = document.createElement('button');
+			chip.type = 'button';
+			chip.className = 'crumb';
+			chip.textContent = `${step.questionText.slice(0, 24)}${step.questionText.length > 24 ? '…' : ''} → ${step.answerLabel}`;
+			chip.addEventListener('click', () => {
+				state.path = state.path.slice(0, i);
+				renderPlayer();
+			});
+			breadcrumbEl.appendChild(chip);
+		});
+
+		const currentId =
+			state.path.length > 0 ? state.path[state.path.length - 1].nextId : state.tree.startNodeId;
+		const node = state.tree.nodes[currentId];
+		const card = document.getElementById('player-card');
+		card.innerHTML = '';
+
+		if (!node) {
+			card.innerHTML = `<div class="alert-banner tone-bad">This path leads to a node that no longer exists ("${escapeHtml(currentId)}").</div>`;
+			return;
+		}
+
+		if (node.type === 'question') {
+			const q = document.createElement('p');
+			q.className = 'player-question';
+			q.textContent = node.text;
+			card.appendChild(q);
+
+			const optsWrap = document.createElement('div');
+			optsWrap.className = 'player-options';
+			for (const opt of node.options) {
+				const btn = document.createElement('button');
+				btn.type = 'button';
+				btn.className = 'btn-ghost player-option';
+				btn.textContent = opt.label;
+				btn.addEventListener('click', () => {
+					state.path.push({ questionText: node.text, answerLabel: opt.label, nextId: opt.nextId });
+					renderPlayer();
+				});
+				optsWrap.appendChild(btn);
+			}
+			card.appendChild(optsWrap);
+		} else {
+			const banner = document.createElement('div');
+			banner.className = `alert-banner tone-${node.tone === 'escalate' ? 'bad' : node.tone === 'resolve' ? 'good' : 'warn'} outcome-banner`;
+			banner.textContent = node.text;
+			card.appendChild(banner);
+
+			if (state.path.length > 0) {
+				const restartBtn = document.createElement('button');
+				restartBtn.type = 'button';
+				restartBtn.className = 'btn-ghost';
+				restartBtn.textContent = '↺ Start over';
+				restartBtn.addEventListener('click', () => {
+					state.path = [];
+					renderPlayer();
+				});
+				card.appendChild(restartBtn);
+			}
+		}
+	}
+
+	// ---------- builder ----------
+
+	function nodeLabel(id) {
+		const node = state.tree.nodes[id];
+		if (!node) return `(missing: ${id})`;
+		const prefix = node.type === 'question' ? 'Q' : 'O';
+		const text = (node.text || '').slice(0, 32);
+		return `[${prefix}] ${text}${(node.text || '').length > 32 ? '…' : ''}`;
+	}
+
+	function renderBuilder() {
+		const titleInput = document.getElementById('tree-title-input');
+		titleInput.value = state.tree.title;
+
+		const startSelect = document.getElementById('start-node-select');
+		startSelect.innerHTML = '';
+		for (const id of state.tree.nodeOrder) {
+			const opt = document.createElement('option');
+			opt.value = id;
+			opt.textContent = nodeLabel(id);
+			if (id === state.tree.startNodeId) opt.selected = true;
+			startSelect.appendChild(opt);
+		}
+
+		const broken = findBrokenLinks(state.tree);
+		const banner = document.getElementById('broken-links-banner');
+		if (broken.length > 0) {
+			banner.hidden = false;
+			banner.textContent = `⚠ ${broken.length} option${broken.length > 1 ? 's point' : ' points'} to a node that doesn't exist — check the highlighted nodes below.`;
+		} else {
+			banner.hidden = true;
+		}
+
+		const container = document.getElementById('nodes-container');
+		container.innerHTML = '';
+		for (const id of state.tree.nodeOrder) {
+			container.appendChild(renderNodeCard(id));
+		}
+	}
+
+	function renderNodeCard(id) {
+		const node = state.tree.nodes[id];
+		const card = document.createElement('div');
+		card.className = 'node-card';
+
+		const head = document.createElement('div');
+		head.className = 'node-card-head';
+
+		const idLabel = document.createElement('span');
+		idLabel.className = 'node-id-label';
+		idLabel.textContent = id === state.tree.startNodeId ? `${id} (start)` : id;
+		head.appendChild(idLabel);
+
+		const typeSelect = document.createElement('select');
+		typeSelect.className = 'tool-input node-type-select';
+		for (const [value, label] of [
+			['question', 'Question'],
+			['outcome', 'Outcome'],
+		]) {
+			const opt = document.createElement('option');
+			opt.value = value;
+			opt.textContent = label;
+			if (node.type === value) opt.selected = true;
+			typeSelect.appendChild(opt);
+		}
+		typeSelect.addEventListener('change', () => {
+			if (typeSelect.value === 'question') {
+				state.tree.nodes[id] = { id, type: 'question', text: node.text, options: [] };
+			} else {
+				state.tree.nodes[id] = { id, type: 'outcome', text: node.text, tone: 'info' };
+			}
+			renderBuilder();
+			scheduleSave();
+		});
+		head.appendChild(typeSelect);
+
+		const deleteBtn = document.createElement('button');
+		deleteBtn.type = 'button';
+		deleteBtn.className = 'icon-btn';
+		deleteBtn.textContent = '✕';
+		deleteBtn.setAttribute('aria-label', 'Delete node');
+		deleteBtn.addEventListener('click', () => {
+			if (state.tree.nodeOrder.length <= 1) return;
+			state.tree.nodeOrder = state.tree.nodeOrder.filter((n) => n !== id);
+			delete state.tree.nodes[id];
+			if (state.tree.startNodeId === id) state.tree.startNodeId = state.tree.nodeOrder[0];
+			renderBuilder();
+			scheduleSave();
+		});
+		head.appendChild(deleteBtn);
+
+		card.appendChild(head);
+
+		const textArea = document.createElement('textarea');
+		textArea.className = 'tool-input node-text';
+		textArea.rows = 2;
+		textArea.value = node.text;
+		textArea.addEventListener('input', () => {
+			node.text = textArea.value;
+			scheduleSave();
+		});
+		card.appendChild(textArea);
+
+		if (node.type === 'question') {
+			const optionsWrap = document.createElement('div');
+			optionsWrap.className = 'options-editor';
+			node.options.forEach((opt, i) => {
+				optionsWrap.appendChild(renderOptionRow(node, opt, i));
+			});
+			card.appendChild(optionsWrap);
+
+			const addOptBtn = document.createElement('button');
+			addOptBtn.type = 'button';
+			addOptBtn.className = 'btn-ghost small';
+			addOptBtn.textContent = '+ Add option';
+			addOptBtn.addEventListener('click', () => {
+				node.options.push({ label: 'New option', nextId: state.tree.nodeOrder[0] });
+				renderBuilder();
+				scheduleSave();
+			});
+			card.appendChild(addOptBtn);
+		} else {
+			const toneSelect = document.createElement('select');
+			toneSelect.className = 'tool-input';
+			for (const [value, label] of [
+				['resolve', 'Resolve'],
+				['escalate', 'Escalate'],
+				['info', 'Info'],
+			]) {
+				const opt = document.createElement('option');
+				opt.value = value;
+				opt.textContent = label;
+				if (node.tone === value) opt.selected = true;
+				toneSelect.appendChild(opt);
+			}
+			toneSelect.addEventListener('change', () => {
+				node.tone = toneSelect.value;
+				scheduleSave();
+			});
+			card.appendChild(toneSelect);
+		}
+
+		return card;
+	}
+
+	function renderOptionRow(node, opt, index) {
+		const row = document.createElement('div');
+		row.className = 'option-row';
+
+		const isBroken = !state.tree.nodes[opt.nextId];
+		if (isBroken) row.classList.add('option-broken');
+
+		const labelInput = document.createElement('input');
+		labelInput.className = 'tool-input option-label-input';
+		labelInput.value = opt.label;
+		labelInput.addEventListener('input', () => {
+			opt.label = labelInput.value;
+			scheduleSave();
+		});
+		row.appendChild(labelInput);
+
+		const nextSelect = document.createElement('select');
+		nextSelect.className = 'tool-input';
+		for (const id of state.tree.nodeOrder) {
+			const o = document.createElement('option');
+			o.value = id;
+			o.textContent = nodeLabel(id);
+			if (id === opt.nextId) o.selected = true;
+			nextSelect.appendChild(o);
+		}
+		nextSelect.addEventListener('change', () => {
+			opt.nextId = nextSelect.value;
+			renderBuilder();
+			scheduleSave();
+		});
+		row.appendChild(nextSelect);
+
+		const removeBtn = document.createElement('button');
+		removeBtn.type = 'button';
+		removeBtn.className = 'icon-btn';
+		removeBtn.textContent = '✕';
+		removeBtn.setAttribute('aria-label', 'Remove option');
+		removeBtn.addEventListener('click', () => {
+			node.options.splice(index, 1);
+			renderBuilder();
+			scheduleSave();
+		});
+		row.appendChild(removeBtn);
+
+		return row;
+	}
+
+	document.getElementById('tree-title-input').addEventListener('input', (e) => {
+		state.tree.title = e.target.value;
+		scheduleSave();
+	});
+	document.getElementById('start-node-select').addEventListener('change', (e) => {
+		state.tree.startNodeId = e.target.value;
+		renderBuilder();
+		scheduleSave();
+	});
+	document.getElementById('add-node-btn').addEventListener('click', () => {
+		const id = nextId();
+		state.tree.nodes[id] = { id, type: 'outcome', tone: 'info', text: 'New outcome text.' };
+		state.tree.nodeOrder.push(id);
+		renderBuilder();
+		scheduleSave();
+	});
+
+	document.getElementById('load-sample-btn').addEventListener('click', () => {
+		state.tree = sampleTree();
+		state.path = [];
+		setMode('play');
+	});
+	document.getElementById('reset-btn').addEventListener('click', () => {
+		state = defaultState();
+		setMode('play');
+	});
+
+	function flashCopyFeedback(message) {
+		const el = document.getElementById('copy-feedback');
+		el.textContent = message;
+		setTimeout(() => {
+			if (el.textContent === message) el.textContent = '';
+		}, 2000);
+	}
+
+	document.getElementById('copy-link-btn').addEventListener('click', async () => {
+		const url = `${location.origin}${location.pathname}?s=${encodeURIComponent(JSON.stringify({ tree: state.tree }))}`;
+		try {
+			await navigator.clipboard.writeText(url);
+			flashCopyFeedback('Link copied.');
+		} catch (e) {
+			flashCopyFeedback('Could not copy — copy manually from the address bar after sharing.');
+		}
+	});
+
+	copyPathBtn.addEventListener('click', async () => {
+		const lines = [state.tree.title, ''];
+		state.path.forEach((step) => {
+			lines.push(`Q: ${step.questionText}`);
+			lines.push(`A: ${step.answerLabel}`);
+		});
+		const currentId =
+			state.path.length > 0 ? state.path[state.path.length - 1].nextId : state.tree.startNodeId;
+		const node = state.tree.nodes[currentId];
+		if (node && node.type === 'outcome') {
+			lines.push('');
+			lines.push(`Outcome: ${node.text}`);
+		}
+		try {
+			await navigator.clipboard.writeText(lines.join('\n'));
+			flashCopyFeedback('Path copied.');
+		} catch (e) {
+			flashCopyFeedback('Could not copy to clipboard.');
+		}
+	});
+
+	// initial render
+	setMode(state.mode);
+</script>
+
+<style is:global>
+	.mode-toggle {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		margin: 32px 0 24px;
+		flex-wrap: wrap;
+	}
+	.mode-spacer {
+		flex: 1;
+	}
+	.mode-btn.active {
+		color: var(--cyan);
+		border-color: var(--cyan);
+		background: rgba(45, 226, 255, 0.08);
+	}
+
+	#tree-title-display {
+		margin-bottom: 16px;
+	}
+
+	.breadcrumb {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		margin-bottom: 16px;
+	}
+	.crumb {
+		font-family: var(--font-mono);
+		font-size: 0.75rem;
+		color: var(--text-dim);
+		background: var(--bg-panel);
+		border: 1px solid var(--border);
+		border-radius: 3px;
+		padding: 4px 10px;
+		cursor: pointer;
+	}
+	.crumb:hover {
+		color: var(--cyan);
+		border-color: var(--cyan);
+	}
+
+	.player-question {
+		font-size: 1.15rem;
+		color: var(--text);
+		margin: 0 0 20px;
+	}
+	.player-options {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+	}
+	.player-option {
+		text-align: left;
+		padding: 12px 16px;
+		font-size: 0.95rem;
+	}
+	.outcome-banner {
+		font-size: 1rem;
+		margin-bottom: 16px;
+	}
+
+	.tree-title-label {
+		flex: 1 1 200px;
+		min-width: 0;
+	}
+	.tree-title-label input {
+		width: 100%;
+		max-width: 360px;
+	}
+	#start-node-select {
+		width: 100%;
+		max-width: 240px;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.start-node-label {
+		flex: 1 1 200px;
+		min-width: 0;
+	}
+
+	.nodes-container {
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+		margin-bottom: 12px;
+	}
+	.node-card {
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		padding: 14px;
+		background: var(--bg-panel);
+	}
+	.node-card-head {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		margin-bottom: 10px;
+	}
+	.node-id-label {
+		font-family: var(--font-mono);
+		font-size: 0.7rem;
+		color: var(--text-dim);
+		flex: 1;
+	}
+	.node-type-select {
+		width: 120px;
+	}
+	.node-text {
+		width: 100%;
+		resize: vertical;
+		margin-bottom: 10px;
+	}
+
+	.options-editor {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		margin-bottom: 10px;
+	}
+	.option-row {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+	.option-label-input {
+		flex: 1;
+		min-width: 0;
+	}
+	.option-row select {
+		flex: 1;
+		min-width: 0;
+	}
+	.option-broken select {
+		border-color: var(--magenta);
+		color: var(--magenta);
+	}
+</style>
